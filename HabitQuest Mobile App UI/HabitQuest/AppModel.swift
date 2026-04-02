@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum AppPhase {
@@ -125,22 +126,52 @@ struct OnboardingStepModel: Hashable {
     let features: [OnboardingFeature]
 }
 
+@MainActor
 final class HabitQuestStore: ObservableObject {
+    private enum Keys {
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
+    }
+
     @Published var phase: AppPhase = .splash
     @Published var selectedTab: MainTab = .dashboard
     @Published var path: [AppDestination] = []
     @Published var habits: [Habit]
     @Published var achievements: [Achievement]
     @Published var userProfile: UserProfile
+    @Published var authEmail: String = ""
+    @Published var isAuthenticating = false
+    @Published var authErrorMessage: String?
+    @Published var authInfoMessage: String?
+
+    let isFirebaseConfigured: Bool
+
+    private let authManager: AuthManaging
+    private let userDefaults: UserDefaults
 
     init(
         habits: [Habit] = SampleData.habits,
         achievements: [Achievement] = SampleData.achievements,
-        userProfile: UserProfile = SampleData.userProfile
+        userProfile: UserProfile = SampleData.userProfile,
+        authManager: AuthManaging = FirebaseAuthManager(),
+        userDefaults: UserDefaults = .standard
     ) {
         self.habits = habits
         self.achievements = achievements
         self.userProfile = userProfile
+        self.authManager = authManager
+        self.userDefaults = userDefaults
+        self.isFirebaseConfigured = authManager.isConfigured
+        self.authEmail = authManager.currentUserEmail ?? ""
+
+        authManager.observeAuthChanges { [weak self] email in
+            guard let self else { return }
+            Task { @MainActor in
+                self.authEmail = email ?? ""
+                if self.hasCompletedOnboarding {
+                    self.phase = email == nil ? .login : .main
+                }
+            }
+        }
     }
 
     var todayLabel: String {
@@ -188,24 +219,95 @@ final class HabitQuestStore: ObservableObject {
         return SampleData.motivationalMessages[dayIndex % SampleData.motivationalMessages.count]
     }
 
+    var hasCompletedOnboarding: Bool {
+        userDefaults.bool(forKey: Keys.hasCompletedOnboarding)
+    }
+
+    var displayName: String {
+        guard !authEmail.isEmpty else { return userProfile.name }
+        return authEmail.components(separatedBy: "@").first ?? userProfile.name
+    }
+
     func completeSplash() {
-        phase = .onboarding
+        phase = hasCompletedOnboarding ? (authEmail.isEmpty ? .login : .main) : .onboarding
     }
 
     func finishOnboarding() {
-        phase = .login
+        userDefaults.set(true, forKey: Keys.hasCompletedOnboarding)
+        phase = authEmail.isEmpty ? .login : .main
     }
 
-    func signIn() {
-        phase = .main
-        selectedTab = .dashboard
-        path = []
+    func signIn(email: String, password: String, isSignUp: Bool) async {
+        authErrorMessage = nil
+        authInfoMessage = nil
+
+        let cleanedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard isFirebaseConfigured else {
+            authErrorMessage = AuthError.firebaseNotConfigured.errorDescription
+            return
+        }
+
+        guard !cleanedEmail.isEmpty, !cleanedPassword.isEmpty else {
+            authErrorMessage = AuthError.emptyCredentials.errorDescription
+            return
+        }
+
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+
+        do {
+            let email = try await authManager.signIn(email: cleanedEmail, password: cleanedPassword, isSignUp: isSignUp)
+            authEmail = email ?? cleanedEmail
+            phase = .main
+            selectedTab = .dashboard
+            path = []
+        } catch {
+            authErrorMessage = Self.message(from: error)
+        }
+    }
+
+    func sendPasswordReset(email: String) async {
+        authErrorMessage = nil
+        authInfoMessage = nil
+
+        let cleanedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        guard isFirebaseConfigured else {
+            authErrorMessage = AuthError.firebaseNotConfigured.errorDescription
+            return
+        }
+
+        guard !cleanedEmail.isEmpty else {
+            authErrorMessage = AuthError.missingResetEmail.errorDescription
+            return
+        }
+
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+
+        do {
+            try await authManager.sendPasswordReset(email: cleanedEmail)
+            authInfoMessage = "Password reset email sent to \(cleanedEmail)."
+        } catch {
+            authErrorMessage = Self.message(from: error)
+        }
     }
 
     func signOut() {
-        phase = .login
-        selectedTab = .dashboard
-        path = []
+        authErrorMessage = nil
+        authInfoMessage = nil
+
+        do {
+            try authManager.signOut()
+            authEmail = ""
+            phase = .login
+            selectedTab = .dashboard
+            path = []
+        } catch {
+            authErrorMessage = Self.message(from: error)
+        }
     }
 
     func showAddHabit() {
@@ -276,5 +378,13 @@ final class HabitQuestStore: ObservableObject {
         default:
             return 30
         }
+    }
+
+    private static func message(from error: Error) -> String {
+        if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
+            return description
+        }
+
+        return error.localizedDescription
     }
 }

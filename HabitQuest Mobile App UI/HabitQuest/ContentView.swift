@@ -348,6 +348,10 @@ private struct LoginScreen: View {
     @State private var showsPassword = false
     @State private var isSignUp = false
 
+    private var authButtonTitle: String {
+        store.isAuthenticating ? (isSignUp ? "Creating Account..." : "Signing In...") : (isSignUp ? "Sign Up" : "Sign In")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 16) {
@@ -392,6 +396,36 @@ private struct LoginScreen: View {
                     }
 
                     VStack(spacing: 20) {
+                        if let authErrorMessage = store.authErrorMessage {
+                            AuthMessageCard(
+                                text: authErrorMessage,
+                                tint: QuestPalette.red,
+                                background: Color(hex: 0xFEF2F2),
+                                border: Color(hex: 0xFECACA),
+                                systemImage: "exclamationmark.circle.fill"
+                            )
+                        }
+
+                        if let authInfoMessage = store.authInfoMessage {
+                            AuthMessageCard(
+                                text: authInfoMessage,
+                                tint: QuestPalette.green,
+                                background: Color(hex: 0xECFDF3),
+                                border: Color(hex: 0xA7F3D0),
+                                systemImage: "checkmark.circle.fill"
+                            )
+                        }
+
+                        if !store.isFirebaseConfigured {
+                            AuthMessageCard(
+                                text: "Firebase is not fully connected yet. Add `GoogleService-Info.plist` to turn on auth.",
+                                tint: QuestPalette.orange,
+                                background: Color(hex: 0xFFF7ED),
+                                border: Color(hex: 0xFED7AA),
+                                systemImage: "wrench.and.screwdriver.fill"
+                            )
+                        }
+
                         LabeledTextField(
                             title: "Email",
                             placeholder: "Enter your email",
@@ -441,20 +475,36 @@ private struct LoginScreen: View {
                         if !isSignUp {
                             HStack {
                                 Spacer()
-                                Button("Forgot Password?") { }
+                                Button("Forgot Password?") {
+                                    Task {
+                                        await store.sendPasswordReset(email: email)
+                                    }
+                                }
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                                     .foregroundStyle(QuestPalette.purple)
+                                    .disabled(store.isAuthenticating)
                             }
                         }
 
                         Button {
-                            store.signIn()
+                            Task {
+                                await store.signIn(email: email, password: password, isSignUp: isSignUp)
+                            }
                         } label: {
-                            Text(isSignUp ? "Sign Up" : "Sign In")
+                            HStack(spacing: 10) {
+                                if store.isAuthenticating {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .tint(.white)
+                                }
+
+                                Text(authButtonTitle)
+                            }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 56)
                         }
                         .buttonStyle(QuestFilledButtonStyle(gradient: QuestPalette.primaryGradient))
+                        .disabled(store.isAuthenticating)
                     }
 
                     HStack(spacing: 16) {
@@ -471,20 +521,20 @@ private struct LoginScreen: View {
 
                     VStack(spacing: 12) {
                         Button {
-                            store.signIn()
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "applelogo")
                                     .font(.system(size: 18, weight: .semibold))
-                                Text("Continue with Apple")
+                                Text("Apple Sign-In Soon")
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
                         }
                         .buttonStyle(QuestSolidButtonStyle(background: .black, foreground: .white))
+                        .disabled(true)
+                        .opacity(0.6)
 
                         Button {
-                            store.signIn()
                         } label: {
                             HStack(spacing: 12) {
                                 Text("G")
@@ -496,12 +546,14 @@ private struct LoginScreen: View {
                                             endPoint: .bottomTrailing
                                         )
                                     )
-                                Text("Continue with Google")
+                                Text("Google Sign-In Soon")
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
                         }
                         .buttonStyle(QuestOutlinedButtonStyle())
+                        .disabled(true)
+                        .opacity(0.6)
                     }
 
                     HStack(spacing: 4) {
@@ -511,6 +563,8 @@ private struct LoginScreen: View {
                         Button(isSignUp ? "Sign In" : "Sign Up") {
                             withAnimation(.easeInOut(duration: 0.25)) {
                                 isSignUp.toggle()
+                                store.authErrorMessage = nil
+                                store.authInfoMessage = nil
                             }
                         }
                         .foregroundStyle(QuestPalette.purple)
@@ -1270,12 +1324,18 @@ private struct ProfileScreen: View {
                             )
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(store.userProfile.name)
+                            Text(store.displayName)
                                 .font(.system(size: 30, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                             Text("Level \(store.userProfile.level) Habit Master")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .foregroundStyle(.white.opacity(0.78))
+
+                            if !store.authEmail.isEmpty {
+                                Text(store.authEmail)
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.72))
+                            }
                         }
 
                         Spacer()
@@ -1864,6 +1924,35 @@ private struct LabeledTextField: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
+    }
+}
+
+private struct AuthMessageCard: View {
+    let text: String
+    let tint: Color
+    let background: Color
+    let border: Color
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(tint)
+                .padding(.top, 2)
+
+            Text(text)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(QuestPalette.gray700)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(background)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
