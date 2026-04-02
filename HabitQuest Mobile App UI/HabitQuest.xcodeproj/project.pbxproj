@@ -15,7 +15,6 @@
 		A00000000000000000000025 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015 /* Assets.xcassets */; };
 		A00000000000000000000026 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* AuthManager.swift */; };
 		A00000000000000000000027 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000041 /* FirebaseAuth */; };
-		A00000000000000000000028 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000042 /* FirebaseCore */; };
 		A00000000000000000000029 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
@@ -51,7 +50,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000000000000000000027 /* FirebaseAuth in Frameworks */,
-				A00000000000000000000028 /* FirebaseCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,7 +106,6 @@
 			name = HabitQuest;
 			packageProductDependencies = (
 				A00000000000000000000041 /* FirebaseAuth */,
-				A00000000000000000000042 /* FirebaseCore */,
 			);
 			productName = HabitQuest;
 			productReference = A0000000000000000000000B /* HabitQuest.app */;
@@ -375,11 +372,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000040 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
-		};
-		A00000000000000000000042 /* FirebaseCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A00000000000000000000040 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
