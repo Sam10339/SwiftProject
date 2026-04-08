@@ -16,6 +16,8 @@
 		A00000000000000000000026 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* AuthManager.swift */; };
 		A00000000000000000000027 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000041 /* FirebaseAuth */; };
 		A00000000000000000000029 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* GoogleService-Info.plist */; };
+		A0000000000000000000002A /* CloudDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* CloudDataManager.swift */; };
+		A0000000000000000000002B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000043 /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -42,6 +44,7 @@
 		A00000000000000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000016 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		A00000000000000000000017 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A00000000000000000000018 /* CloudDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -50,6 +53,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000000000000000000027 /* FirebaseAuth in Frameworks */,
+				A0000000000000000000002B /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +85,7 @@
 				A00000000000000000000013 /* SampleData.swift */,
 				A00000000000000000000014 /* ContentView.swift */,
 				A00000000000000000000016 /* AuthManager.swift */,
+				A00000000000000000000018 /* CloudDataManager.swift */,
 				A00000000000000000000017 /* GoogleService-Info.plist */,
 				A00000000000000000000015 /* Assets.xcassets */,
 			);
@@ -106,6 +111,7 @@
 			name = HabitQuest;
 			packageProductDependencies = (
 				A00000000000000000000041 /* FirebaseAuth */,
+				A00000000000000000000043 /* FirebaseFirestore */,
 			);
 			productName = HabitQuest;
 			productReference = A0000000000000000000000B /* HabitQuest.app */;
@@ -169,6 +175,7 @@
 				A00000000000000000000023 /* SampleData.swift in Sources */,
 				A00000000000000000000024 /* ContentView.swift in Sources */,
 				A00000000000000000000026 /* AuthManager.swift in Sources */,
+				A0000000000000000000002A /* CloudDataManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,6 +379,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000040 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
+		};
+		A00000000000000000000043 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000040 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
