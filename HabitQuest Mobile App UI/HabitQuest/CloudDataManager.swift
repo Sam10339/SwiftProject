@@ -263,7 +263,7 @@ private extension DocumentReference {
     }
 
     func codexDelete() async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             delete { error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -293,7 +293,7 @@ private extension CollectionReference {
 
 private extension WriteBatch {
     func codexCommit() async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             commit { error in
                 if let error {
                     continuation.resume(throwing: error)
