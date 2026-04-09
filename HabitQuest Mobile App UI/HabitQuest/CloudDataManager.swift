@@ -106,7 +106,7 @@ final class FirestoreDataManager: CloudDataManaging {
     }
 }
 
-private extension UserCloudSnapshot {
+extension UserCloudSnapshot {
     static func starter(email: String?) -> UserCloudSnapshot {
         UserCloudSnapshot(
             profile: UserProfile.starter(email: email),
@@ -116,7 +116,7 @@ private extension UserCloudSnapshot {
     }
 }
 
-private extension UserProfile {
+extension UserProfile {
     static func starter(email: String?) -> UserProfile {
         UserProfile(
             name: Self.defaultName(for: email),

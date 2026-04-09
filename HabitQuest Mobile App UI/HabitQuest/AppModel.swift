@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import FirebaseFirestore
 
 enum AppPhase: Equatable {
     case splash
@@ -437,6 +438,7 @@ final class HabitQuestStore: ObservableObject {
 
         isSyncingRemoteData = true
         authErrorMessage = nil
+        authInfoMessage = nil
 
         defer { isSyncingRemoteData = false }
 
@@ -454,7 +456,22 @@ final class HabitQuestStore: ObservableObject {
                 phase = .main
             }
         } catch {
-            authErrorMessage = Self.message(from: error)
+            if Self.isFirestoreOffline(error) {
+                let starterSnapshot = UserCloudSnapshot.starter(email: session.email)
+                activeUserID = session.userID
+                authEmail = session.email ?? ""
+                userProfile = starterSnapshot.profile
+                habits = starterSnapshot.habits
+                achievements = starterSnapshot.achievements
+                selectedTab = .dashboard
+                path = []
+                if hasCompletedOnboarding {
+                    phase = .main
+                }
+                authInfoMessage = "Your account was created, but Firestore is offline right now. You're using starter data until the app can reconnect."
+            } else {
+                authErrorMessage = Self.message(from: error)
+            }
         }
     }
 
@@ -623,5 +640,11 @@ final class HabitQuestStore: ObservableObject {
         }
 
         return error.localizedDescription
+    }
+
+    private static func isFirestoreOffline(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == FirestoreErrorDomain
+            && nsError.code == FirestoreErrorCode.unavailable.rawValue
     }
 }
