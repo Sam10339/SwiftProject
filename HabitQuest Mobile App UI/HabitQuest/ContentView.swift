@@ -735,8 +735,12 @@ private struct DashboardScreen: View {
                                 ForEach(store.habits) { habit in
                                     HabitRowCard(
                                         habit: habit,
-                                        onToggle: {
-                                            store.toggleHabit(id: habit.id)
+                                        isFailedToday: habit.missedHistory.contains(store.todayKey),
+                                        onComplete: {
+                                            store.completeHabit(id: habit.id)
+                                        },
+                                        onFail: {
+                                            store.failHabit(id: habit.id)
                                         },
                                         onSelect: {
                                             store.showHabitDetail(id: habit.id)
@@ -1573,19 +1577,25 @@ private struct QuestTabBar: View {
 
 private struct HabitRowCard: View {
     let habit: Habit
-    let onToggle: () -> Void
+    let isFailedToday: Bool
+    let onComplete: () -> Void
+    let onFail: () -> Void
     let onSelect: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
-            Button(action: onToggle) {
+        HStack(alignment: .center, spacing: 16) {
+            Button(action: onSelect) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(habit.completed ? AnyShapeStyle(QuestPalette.primaryGradient.linear) : AnyShapeStyle(QuestPalette.gray100))
+                    .fill(statusBackground)
                     .frame(width: 48, height: 48)
                     .overlay(
                         Group {
                             if habit.completed {
                                 Image(systemName: "checkmark")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                            } else if isFailedToday {
+                                Image(systemName: "xmark")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundStyle(.white)
                             } else {
@@ -1610,10 +1620,32 @@ private struct HabitRowCard: View {
                     Text("+\(habit.xp) XP")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.purple)
+
+                    Text("-\(habit.xpPenalty) XP fail")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(QuestPalette.red)
                 }
+
+                Text(statusLabel)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(statusColor)
             }
 
             Spacer()
+
+            VStack(spacing: 8) {
+                Button(action: onComplete) {
+                    Text(habit.completed ? "Completed" : "Complete")
+                        .frame(width: 92, height: 34)
+                }
+                .buttonStyle(QuestMiniButtonStyle(background: habit.completed ? QuestPalette.green : QuestPalette.gray100, foreground: habit.completed ? .white : QuestPalette.gray900))
+
+                Button(action: onFail) {
+                    Text(isFailedToday ? "Failed" : "Fail")
+                        .frame(width: 92, height: 34)
+                }
+                .buttonStyle(QuestMiniButtonStyle(background: isFailedToday ? QuestPalette.red : Color(hex: 0xFEF2F2), foreground: isFailedToday ? .white : QuestPalette.red))
+            }
         }
         .padding(16)
         .questCardStyle(
@@ -1623,8 +1655,42 @@ private struct HabitRowCard: View {
             shadowRadius: 10,
             shadowY: 6
         )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
+    }
+
+    private var statusLabel: String {
+        if habit.completed {
+            return "Marked complete for today"
+        }
+
+        if isFailedToday {
+            return "Marked failed for today"
+        }
+
+        return "No result logged for today"
+    }
+
+    private var statusColor: Color {
+        if habit.completed {
+            return QuestPalette.green
+        }
+
+        if isFailedToday {
+            return QuestPalette.red
+        }
+
+        return QuestPalette.gray500
+    }
+
+    private var statusBackground: AnyShapeStyle {
+        if habit.completed {
+            return AnyShapeStyle(QuestPalette.primaryGradient.linear)
+        }
+
+        if isFailedToday {
+            return AnyShapeStyle(Color(hex: 0xEF4444))
+        }
+
+        return AnyShapeStyle(QuestPalette.gray100)
     }
 }
 
@@ -2364,5 +2430,22 @@ private struct QuestChipButtonStyle: ButtonStyle {
             .shadow(color: isSelected ? Color.black.opacity(0.1) : .clear, radius: 8, x: 0, y: 4)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+private struct QuestMiniButtonStyle: ButtonStyle {
+    let background: Color
+    let foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(foreground)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(background)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

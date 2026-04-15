@@ -66,7 +66,7 @@ struct Habit: Identifiable, Hashable {
     }
 
     var xpPenalty: Int {
-        max(5, Int((Double(xp) * 0.2).rounded()))
+        xp / 2
     }
 
     var totalLostXP: Int {
@@ -323,6 +323,10 @@ final class HabitQuestStore: ObservableObject {
         userDefaults.bool(forKey: Keys.hasCompletedOnboarding)
     }
 
+    var todayKey: String {
+        Self.dayKey(for: .now)
+    }
+
     var displayName: String {
         guard !userProfile.name.isEmpty else {
             return authEmail.components(separatedBy: "@").first ?? "Habit Hero"
@@ -431,27 +435,54 @@ final class HabitQuestStore: ObservableObject {
         habits.first(where: { $0.id == id })
     }
 
-    func toggleHabit(id: String) {
+    func completeHabit(id: String) {
         guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
 
         var habit = habits[index]
-        let todayKey = Self.dayKey(for: .now)
+        let todayKey = self.todayKey
 
-        if habit.completed {
-            habit.completed = false
+        guard !habit.completionHistory.contains(todayKey) else { return }
+
+        if habit.missedHistory.contains(todayKey) {
+            habit.missedHistory.removeAll { $0 == todayKey }
+            awardXP(habit.xpPenalty)
+        }
+
+        habit.completed = true
+        habit.completionHistory.append(todayKey)
+        awardXP(habit.xp)
+
+        habit.completionHistory = Self.sortedHistory(habit.completionHistory)
+        habit.missedHistory = Self.sortedHistory(habit.missedHistory)
+        habit.streak = Self.currentStreak(for: habit.completionHistory)
+        habits[index] = habit
+
+        refreshDerivedState(awardAchievementBonuses: true)
+        schedulePersistCurrentUserState()
+    }
+
+    func failHabit(id: String) {
+        guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
+
+        var habit = habits[index]
+        let todayKey = self.todayKey
+
+        guard !habit.missedHistory.contains(todayKey) else { return }
+
+        if habit.completionHistory.contains(todayKey) {
             habit.completionHistory.removeAll { $0 == todayKey }
             removeXP(habit.xp)
-            userProfile.totalHabitsCompleted = max(userProfile.totalHabitsCompleted - 1, 0)
-        } else {
-            habit.completed = true
-            if !habit.completionHistory.contains(todayKey) {
-                habit.completionHistory.append(todayKey)
-            }
-            awardXP(habit.xp)
-            userProfile.totalHabitsCompleted += 1
+        }
+
+        habit.completed = false
+        habit.missedHistory.append(todayKey)
+
+        if habit.xpPenalty > 0 {
+            removeXP(habit.xpPenalty)
         }
 
         habit.completionHistory = Self.sortedHistory(habit.completionHistory)
+        habit.missedHistory = Self.sortedHistory(habit.missedHistory)
         habit.streak = Self.currentStreak(for: habit.completionHistory)
         habits[index] = habit
 
