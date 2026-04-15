@@ -125,7 +125,8 @@ extension UserProfile {
             xpToNextLevel: 300,
             totalHabitsCompleted: 0,
             longestStreak: 0,
-            avatar: "\u{1F464}"
+            avatar: "\u{1F464}",
+            lastDailyRefreshDate: nil
         )
     }
 
@@ -140,7 +141,8 @@ extension UserProfile {
             xpToNextLevel: data["xpToNextLevel"] as? Int ?? starter.xpToNextLevel,
             totalHabitsCompleted: data["totalHabitsCompleted"] as? Int ?? starter.totalHabitsCompleted,
             longestStreak: data["longestStreak"] as? Int ?? starter.longestStreak,
-            avatar: data["avatar"] as? String ?? starter.avatar
+            avatar: data["avatar"] as? String ?? starter.avatar,
+            lastDailyRefreshDate: data["lastDailyRefreshDate"] as? String
         )
     }
 
@@ -154,6 +156,7 @@ extension UserProfile {
             "totalHabitsCompleted": totalHabitsCompleted,
             "longestStreak": longestStreak,
             "avatar": avatar,
+            "lastDailyRefreshDate": lastDailyRefreshDate ?? NSNull(),
             "updatedAt": FieldValue.serverTimestamp()
         ]
     }
@@ -185,6 +188,7 @@ private extension Habit {
             completed: data["completed"] as? Bool ?? false,
             xp: data["xp"] as? Int ?? 30,
             completionHistory: data["completionHistory"] as? [String] ?? [],
+            missedHistory: data["missedHistory"] as? [String] ?? [],
             reminderEnabled: data["reminderEnabled"] as? Bool ?? false,
             reminderTime: data["reminderTime"] as? String
         )
@@ -200,6 +204,7 @@ private extension Habit {
             "completed": completed,
             "xp": xp,
             "completionHistory": completionHistory,
+            "missedHistory": missedHistory,
             "reminderEnabled": reminderEnabled,
             "reminderTime": reminderTime ?? NSNull(),
             "updatedAt": FieldValue.serverTimestamp()

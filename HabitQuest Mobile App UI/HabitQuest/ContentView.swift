@@ -677,7 +677,8 @@ private struct DashboardScreen: View {
 
                             VStack(spacing: 14) {
                                 DashboardStatLine(label: "Completion", value: "\(store.dailyCompletionPercentage)%", valueColor: QuestPalette.gray900)
-                                DashboardStatLine(label: "XP Earned", value: "+\(store.totalXPToday) XP", valueGradient: QuestPalette.primaryGradient)
+                                DashboardStatLine(label: "XP Gained", value: "+\(store.xpGainedToday) XP", valueGradient: QuestPalette.primaryGradient)
+                                DashboardStatLine(label: "XP Lost", value: "-\(store.xpLostToday) XP", valueColor: QuestPalette.red)
                                 DashboardStatLine(label: "Longest Streak", value: "\(store.userProfile.longestStreak) days", valueColor: QuestPalette.orange)
                             }
                             .frame(maxWidth: .infinity)
@@ -1226,8 +1227,8 @@ private struct AnalyticsScreen: View {
                 LazyVGrid(columns: twoColumnGrid, spacing: 12) {
                     AnalyticsMetricCard(symbol: "chart.line.uptrend.xyaxis", symbolColor: QuestPalette.green, value: "\(store.completedHabitsCount)/\(store.habits.count)", label: "Completed Today", backgroundColors: [QuestPalette.greenSoft, Color(hex: 0xECFDF5)], border: Color(hex: 0xBBF7D0))
                     AnalyticsMetricCard(symbol: "calendar", symbolColor: QuestPalette.orange, value: "\(store.averageStreak)", label: "Avg Streak Days", backgroundColors: [QuestPalette.orangeSoft, Color(hex: 0xFEF2F2)], border: Color(hex: 0xFED7AA))
-                    AnalyticsMetricCard(symbol: "bolt.fill", symbolColor: QuestPalette.purple, value: "1240", label: "XP This Week", backgroundColors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], border: Color(hex: 0xE9D5FF))
-                    AnalyticsMetricCard(symbol: "rosette", symbolColor: QuestPalette.blue, value: "88%", label: "Success Rate", backgroundColors: [Color(hex: 0xEFF6FF), Color(hex: 0xECFEFF)], border: Color(hex: 0xBFDBFE))
+                    AnalyticsMetricCard(symbol: "bolt.fill", symbolColor: QuestPalette.purple, value: "\(store.weeklyNetXP)", label: "Net XP This Week", backgroundColors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], border: Color(hex: 0xE9D5FF))
+                    AnalyticsMetricCard(symbol: "rosette", symbolColor: QuestPalette.blue, value: "\(store.successRate)%", label: "Success Rate", backgroundColors: [Color(hex: 0xEFF6FF), Color(hex: 0xECFEFF)], border: Color(hex: 0xBFDBFE))
                 }
                 .padding(.horizontal, QuestLayout.contentPadding)
 
@@ -1236,7 +1237,7 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    WeeklyBarChart(data: SampleData.weeklyActivity)
+                    WeeklyBarChart(data: store.weeklyActivity)
                 }
                 .padding(20)
                 .questCardStyle()
@@ -1247,7 +1248,7 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    MonthlyLineChart(data: SampleData.monthlyCompletion)
+                    MonthlyLineChart(data: store.monthlyCompletion)
                         .frame(height: 220)
                 }
                 .padding(20)
@@ -1274,9 +1275,9 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    InsightBullet(text: "You're most consistent on weekdays! Keep it up! \u{1F3AF}")
-                    InsightBullet(text: "Your morning habits have a 95% completion rate \u{2B50}")
-                    InsightBullet(text: "You've completed 21 habits this week - new record! \u{1F3C6}")
+                    InsightBullet(text: "You've completed \(store.userProfile.totalHabitsCompleted) habit check-ins across your account.")
+                    InsightBullet(text: "Your current success rate is \(store.successRate)% based on completed vs missed habit days.")
+                    InsightBullet(text: "Your net habit XP over the last 7 days is \(store.weeklyNetXP).")
                 }
                 .padding(20)
                 .questCardStyle(
@@ -1393,6 +1394,12 @@ private struct ProfileScreen: View {
                     OverviewMetricCard(symbol: "crown.fill", symbolColor: QuestPalette.yellow, value: "\(store.userProfile.level)", label: "Level", backgroundColors: [Color(hex: 0xFFFBEB), Color(hex: 0xFFF7ED)], border: Color(hex: 0xFDE68A))
                     OverviewMetricCard(symbol: "flame.fill", symbolColor: QuestPalette.orange, value: "\(store.userProfile.longestStreak)", label: "Best Streak", backgroundColors: [QuestPalette.orangeSoft, Color(hex: 0xFEF2F2)], border: Color(hex: 0xFED7AA))
                     OverviewMetricCard(symbol: "target", symbolColor: QuestPalette.purple, value: "\(store.userProfile.totalHabitsCompleted)", label: "Completed", backgroundColors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], border: Color(hex: 0xE9D5FF))
+                }
+                .padding(.horizontal, QuestLayout.contentPadding)
+
+                HStack(spacing: 12) {
+                    OverviewMetricCard(symbol: "plus.circle.fill", symbolColor: QuestPalette.green, value: "+\(store.totalXPGained)", label: "XP Gained", backgroundColors: [QuestPalette.greenSoft, Color(hex: 0xECFDF5)], border: Color(hex: 0xBBF7D0))
+                    OverviewMetricCard(symbol: "minus.circle.fill", symbolColor: QuestPalette.red, value: "-\(store.totalXPLost)", label: "XP Lost", backgroundColors: [Color(hex: 0xFEF2F2), Color(hex: 0xFFF1F2)], border: Color(hex: 0xFECACA))
                 }
                 .padding(.horizontal, QuestLayout.contentPadding)
 
