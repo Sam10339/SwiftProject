@@ -1,7 +1,8 @@
 import Combine
 import Foundation
+import FirebaseFirestore
 
-enum AppPhase {
+enum AppPhase: Equatable {
     case splash
     case onboarding
     case login
@@ -140,36 +141,41 @@ final class HabitQuestStore: ObservableObject {
     @Published var userProfile: UserProfile
     @Published var authEmail: String = ""
     @Published var isAuthenticating = false
+    @Published var isSyncingRemoteData = false
     @Published var authErrorMessage: String?
     @Published var authInfoMessage: String?
 
     let isFirebaseConfigured: Bool
 
     private let authManager: AuthManaging
+    private let cloudDataManager: CloudDataManaging
     private let userDefaults: UserDefaults
+
+    private var activeUserID: String?
+    private var persistenceTask: Task<Void, Never>?
 
     init(
         habits: [Habit] = SampleData.habits,
         achievements: [Achievement] = SampleData.achievements,
         userProfile: UserProfile = SampleData.userProfile,
         authManager: AuthManaging = FirebaseAuthManager(),
+        cloudDataManager: CloudDataManaging = FirestoreDataManager(),
         userDefaults: UserDefaults = .standard
     ) {
         self.habits = habits
         self.achievements = achievements
         self.userProfile = userProfile
         self.authManager = authManager
+        self.cloudDataManager = cloudDataManager
         self.userDefaults = userDefaults
-        self.isFirebaseConfigured = authManager.isConfigured
-        self.authEmail = authManager.currentUserEmail ?? ""
+        self.isFirebaseConfigured = authManager.isConfigured && cloudDataManager.isConfigured
+        self.authEmail = authManager.currentSession?.email ?? ""
+        self.activeUserID = authManager.currentSession?.userID
 
-        authManager.observeAuthChanges { [weak self] email in
+        authManager.observeAuthChanges { [weak self] session in
             guard let self else { return }
             Task { @MainActor in
-                self.authEmail = email ?? ""
-                if self.hasCompletedOnboarding {
-                    self.phase = email == nil ? .login : .main
-                }
+                await self.handleAuthStateChange(session)
             }
         }
     }
@@ -224,17 +230,27 @@ final class HabitQuestStore: ObservableObject {
     }
 
     var displayName: String {
-        guard !authEmail.isEmpty else { return userProfile.name }
-        return authEmail.components(separatedBy: "@").first ?? userProfile.name
+        guard !userProfile.name.isEmpty else {
+            return authEmail.components(separatedBy: "@").first ?? "Habit Hero"
+        }
+
+        return userProfile.name
     }
 
     func completeSplash() {
-        phase = hasCompletedOnboarding ? (authEmail.isEmpty ? .login : .main) : .onboarding
+        guard hasCompletedOnboarding else {
+            phase = .onboarding
+            return
+        }
+
+        if authManager.currentSession == nil {
+            phase = .login
+        }
     }
 
     func finishOnboarding() {
         userDefaults.set(true, forKey: Keys.hasCompletedOnboarding)
-        phase = authEmail.isEmpty ? .login : .main
+        phase = authManager.currentSession == nil ? .login : .main
     }
 
     func signIn(email: String, password: String, isSignUp: Bool) async {
@@ -258,11 +274,8 @@ final class HabitQuestStore: ObservableObject {
         defer { isAuthenticating = false }
 
         do {
-            let email = try await authManager.signIn(email: cleanedEmail, password: cleanedPassword, isSignUp: isSignUp)
-            authEmail = email ?? cleanedEmail
-            phase = .main
-            selectedTab = .dashboard
-            path = []
+            let session = try await authManager.signIn(email: cleanedEmail, password: cleanedPassword, isSignUp: isSignUp)
+            await loadRemoteData(for: session)
         } catch {
             authErrorMessage = Self.message(from: error)
         }
@@ -274,7 +287,7 @@ final class HabitQuestStore: ObservableObject {
 
         let cleanedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        guard isFirebaseConfigured else {
+        guard authManager.isConfigured else {
             authErrorMessage = AuthError.firebaseNotConfigured.errorDescription
             return
         }
@@ -301,6 +314,8 @@ final class HabitQuestStore: ObservableObject {
 
         do {
             try authManager.signOut()
+            resetLocalData()
+            activeUserID = nil
             authEmail = ""
             phase = .login
             selectedTab = .dashboard
@@ -325,16 +340,29 @@ final class HabitQuestStore: ObservableObject {
     func toggleHabit(id: String) {
         guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
 
-        let wasCompleted = habits[index].completed
-        habits[index].completed.toggle()
+        var habit = habits[index]
+        let todayKey = Self.dayKey(for: .now)
 
-        if wasCompleted {
-            userProfile.currentXP = max(0, userProfile.currentXP - habits[index].xp)
-            userProfile.totalHabitsCompleted = max(0, userProfile.totalHabitsCompleted - 1)
+        if habit.completed {
+            habit.completed = false
+            habit.completionHistory.removeAll { $0 == todayKey }
+            removeXP(habit.xp)
+            userProfile.totalHabitsCompleted = max(userProfile.totalHabitsCompleted - 1, 0)
         } else {
-            userProfile.currentXP = min(userProfile.xpToNextLevel, userProfile.currentXP + habits[index].xp)
+            habit.completed = true
+            if !habit.completionHistory.contains(todayKey) {
+                habit.completionHistory.append(todayKey)
+            }
+            awardXP(habit.xp)
             userProfile.totalHabitsCompleted += 1
         }
+
+        habit.completionHistory = Self.sortedHistory(habit.completionHistory)
+        habit.streak = Self.currentStreak(for: habit.completionHistory)
+        habits[index] = habit
+
+        refreshDerivedState(awardAchievementBonuses: true)
+        schedulePersistCurrentUserState()
     }
 
     func addHabit(from draft: HabitDraft) {
@@ -357,10 +385,203 @@ final class HabitQuestStore: ObservableObject {
 
         habits.insert(newHabit, at: 0)
         selectedTab = .dashboard
+        refreshDerivedState(awardAchievementBonuses: false)
+        schedulePersistCurrentUserState()
     }
 
     func deleteHabit(id: String) {
         habits.removeAll { $0.id == id }
+        refreshDerivedState(awardAchievementBonuses: false)
+
+        guard let userID = activeUserID else { return }
+
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.cloudDataManager.deleteHabit(userID: userID, habitID: id)
+                try await self.persistCurrentUserState()
+            } catch {
+                await MainActor.run {
+                    self.authErrorMessage = Self.message(from: error)
+                }
+            }
+        }
+    }
+
+    private func handleAuthStateChange(_ session: AuthSession?) async {
+        authEmail = session?.email ?? ""
+
+        guard let session else {
+            activeUserID = nil
+            resetLocalData()
+            if hasCompletedOnboarding && phase != .splash {
+                phase = .login
+            }
+            return
+        }
+
+        guard hasCompletedOnboarding else { return }
+
+        if activeUserID != session.userID || phase == .splash {
+            await loadRemoteData(for: session)
+        } else if phase != .main {
+            phase = .main
+        }
+    }
+
+    private func loadRemoteData(for session: AuthSession) async {
+        guard isFirebaseConfigured else {
+            authErrorMessage = CloudDataError.firestoreNotConfigured.errorDescription
+            return
+        }
+
+        isSyncingRemoteData = true
+        authErrorMessage = nil
+        authInfoMessage = nil
+
+        defer { isSyncingRemoteData = false }
+
+        do {
+            let snapshot = try await cloudDataManager.loadOrCreateUserSnapshot(userID: session.userID, email: session.email)
+            activeUserID = session.userID
+            authEmail = session.email ?? ""
+            userProfile = snapshot.profile
+            habits = snapshot.habits
+            achievements = snapshot.achievements
+            refreshDerivedState(awardAchievementBonuses: false)
+            selectedTab = .dashboard
+            path = []
+            if hasCompletedOnboarding {
+                phase = .main
+            }
+        } catch {
+            if Self.isFirestoreOffline(error) {
+                let starterSnapshot = UserCloudSnapshot.starter(email: session.email)
+                activeUserID = session.userID
+                authEmail = session.email ?? ""
+                userProfile = starterSnapshot.profile
+                habits = starterSnapshot.habits
+                achievements = starterSnapshot.achievements
+                selectedTab = .dashboard
+                path = []
+                if hasCompletedOnboarding {
+                    phase = .main
+                }
+                authInfoMessage = "Your account was created, but Firestore is offline right now. You're using starter data until the app can reconnect."
+            } else {
+                authErrorMessage = Self.message(from: error)
+            }
+        }
+    }
+
+    private func persistCurrentUserState() async throws {
+        guard let userID = activeUserID else { return }
+
+        let snapshot = UserCloudSnapshot(profile: userProfile, habits: habits, achievements: achievements)
+        try await cloudDataManager.saveUserSnapshot(userID: userID, email: authEmail, snapshot: snapshot)
+    }
+
+    private func schedulePersistCurrentUserState() {
+        guard activeUserID != nil else { return }
+
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.persistCurrentUserState()
+            } catch {
+                await MainActor.run {
+                    self.authErrorMessage = Self.message(from: error)
+                }
+            }
+        }
+    }
+
+    private func resetLocalData() {
+        habits = []
+        achievements = Achievement.starterSet
+        userProfile = UserProfile(name: "", level: 1, currentXP: 0, xpToNextLevel: 300, totalHabitsCompleted: 0, longestStreak: 0, avatar: "\u{1F464}")
+    }
+
+    private func refreshDerivedState(awardAchievementBonuses: Bool) {
+        habits = habits.map { habit in
+            var habit = habit
+            habit.completionHistory = Self.sortedHistory(habit.completionHistory)
+            habit.streak = Self.currentStreak(for: habit.completionHistory)
+            habit.completed = habit.completionHistory.contains(Self.dayKey(for: .now))
+            return habit
+        }
+
+        userProfile.longestStreak = habits.map(\.streak).max() ?? 0
+        updateAchievements(awardBonuses: awardAchievementBonuses)
+    }
+
+    private func updateAchievements(awardBonuses: Bool) {
+        let todayCompletedCount = habits.filter(\.completed).count
+        let longestStreak = userProfile.longestStreak
+        let totalCompleted = userProfile.totalHabitsCompleted
+        let earlyBirdProgress = habits.filter {
+            $0.reminderEnabled && ($0.reminderTime ?? "99:99") < "08:00" && $0.completed
+        }.count
+
+        achievements = achievements.map { achievement in
+            let target = achievement.total ?? 1
+            let progress: Int
+
+            switch achievement.id {
+            case "1":
+                progress = totalCompleted
+            case "2":
+                progress = longestStreak
+            case "3":
+                progress = longestStreak
+            case "4":
+                progress = totalCompleted
+            case "5":
+                progress = earlyBirdProgress
+            case "6":
+                progress = todayCompletedCount
+            default:
+                progress = achievement.progress ?? 0
+            }
+
+            let cappedProgress = min(progress, target)
+            let shouldUnlock = progress >= target
+            let newlyUnlocked = shouldUnlock && !achievement.unlocked
+
+            if awardBonuses && newlyUnlocked {
+                awardXP(achievement.xpReward)
+            }
+
+            return Achievement(
+                id: achievement.id,
+                title: achievement.title,
+                description: achievement.description,
+                icon: achievement.icon,
+                unlocked: shouldUnlock,
+                progress: shouldUnlock ? nil : cappedProgress,
+                total: achievement.total,
+                xpReward: achievement.xpReward
+            )
+        }
+    }
+
+    private func awardXP(_ amount: Int) {
+        guard amount > 0 else { return }
+
+        userProfile.currentXP += amount
+        while userProfile.currentXP >= userProfile.xpToNextLevel {
+            userProfile.currentXP -= userProfile.xpToNextLevel
+            userProfile.level += 1
+            userProfile.xpToNextLevel += 150
+        }
+    }
+
+    private func removeXP(_ amount: Int) {
+        guard amount > 0 else { return }
+        userProfile.currentXP = max(userProfile.currentXP - amount, 0)
     }
 
     private func xpValue(for category: String) -> Int {
@@ -380,11 +601,50 @@ final class HabitQuestStore: ObservableObject {
         }
     }
 
+    private static func currentStreak(for history: [String]) -> Int {
+        let uniqueDates = Set(history.compactMap(Self.dateFormatter.date(from:)))
+        guard let latestDate = uniqueDates.max() else { return 0 }
+
+        var streak = 0
+        var cursor = latestDate
+
+        while uniqueDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: cursor) }) {
+            streak += 1
+            guard let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previousDay
+        }
+
+        return streak
+    }
+
+    private static func sortedHistory(_ history: [String]) -> [String] {
+        Array(Set(history)).sorted(by: >)
+    }
+
+    private static func dayKey(for date: Date) -> String {
+        dateFormatter.string(from: date)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
     private static func message(from error: Error) -> String {
         if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
             return description
         }
 
         return error.localizedDescription
+    }
+
+    private static func isFirestoreOffline(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == FirestoreErrorDomain
+            && nsError.code == FirestoreErrorCode.unavailable.rawValue
     }
 }

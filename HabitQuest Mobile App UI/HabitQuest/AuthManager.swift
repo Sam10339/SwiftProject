@@ -2,6 +2,11 @@ import Foundation
 import FirebaseAuth
 import FirebaseCore
 
+struct AuthSession: Equatable {
+    let userID: String
+    let email: String?
+}
+
 enum AuthError: LocalizedError {
     case firebaseNotConfigured
     case emptyCredentials
@@ -22,9 +27,10 @@ enum AuthError: LocalizedError {
 protocol AuthManaging {
     var isConfigured: Bool { get }
     var currentUserEmail: String? { get }
+    var currentSession: AuthSession? { get }
 
-    func observeAuthChanges(_ handler: @escaping (String?) -> Void)
-    func signIn(email: String, password: String, isSignUp: Bool) async throws -> String?
+    func observeAuthChanges(_ handler: @escaping (AuthSession?) -> Void)
+    func signIn(email: String, password: String, isSignUp: Bool) async throws -> AuthSession
     func sendPasswordReset(email: String) async throws
     func signOut() throws
 }
@@ -57,12 +63,17 @@ final class FirebaseAuthManager: AuthManaging {
         return Auth.auth().currentUser?.email
     }
 
+    var currentSession: AuthSession? {
+        guard isConfigured, let user = Auth.auth().currentUser else { return nil }
+        return AuthSession(userID: user.uid, email: user.email)
+    }
+
     deinit {
         guard let authStateHandle, isConfigured else { return }
         Auth.auth().removeStateDidChangeListener(authStateHandle)
     }
 
-    func observeAuthChanges(_ handler: @escaping (String?) -> Void) {
+    func observeAuthChanges(_ handler: @escaping (AuthSession?) -> Void) {
         guard isConfigured else {
             handler(nil)
             return
@@ -73,11 +84,16 @@ final class FirebaseAuthManager: AuthManaging {
         }
 
         authStateHandle = Auth.auth().addStateDidChangeListener { _, user in
-            handler(user?.email)
+            guard let user else {
+                handler(nil)
+                return
+            }
+
+            handler(AuthSession(userID: user.uid, email: user.email))
         }
     }
 
-    func signIn(email: String, password: String, isSignUp: Bool) async throws -> String? {
+    func signIn(email: String, password: String, isSignUp: Bool) async throws -> AuthSession {
         guard isConfigured else {
             throw AuthError.firebaseNotConfigured
         }
@@ -89,7 +105,7 @@ final class FirebaseAuthManager: AuthManaging {
             result = try await Auth.auth().signIn(withEmail: email, password: password)
         }
 
-        return result.user.email
+        return AuthSession(userID: result.user.uid, email: result.user.email)
     }
 
     func sendPasswordReset(email: String) async throws {
