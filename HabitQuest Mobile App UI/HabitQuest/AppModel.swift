@@ -87,6 +87,7 @@ struct Achievement: Identifiable, Hashable {
 
 struct UserProfile: Hashable {
     var name: String
+    var totalXP: Int
     var level: Int
     var currentXP: Int
     var xpToNextLevel: Int
@@ -135,6 +136,47 @@ struct OnboardingStepModel: Hashable {
     let icon: String
     let gradient: QuestGradientSet
     let features: [OnboardingFeature]
+}
+
+enum QuestLeveling {
+    static let maxLevel = 50
+    static let baseXPRequirement = 300
+    static let xpRequirementStep = 75
+
+    static func xpRequired(for level: Int) -> Int {
+        guard level > 0 else { return baseXPRequirement }
+        return baseXPRequirement + max(level - 1, 0) * xpRequirementStep
+    }
+
+    static func state(for totalXP: Int) -> (level: Int, currentXP: Int, xpToNextLevel: Int) {
+        var remainingXP = max(totalXP, 0)
+        var level = 1
+
+        while level < maxLevel {
+            let requirement = xpRequired(for: level)
+            if remainingXP < requirement {
+                return (level, remainingXP, requirement)
+            }
+
+            remainingXP -= requirement
+            level += 1
+        }
+
+        return (maxLevel, 0, xpRequired(for: maxLevel - 1))
+    }
+
+    static func totalXP(forLevel level: Int, currentXP: Int) -> Int {
+        let clampedLevel = min(max(level, 1), maxLevel)
+        let earnedBeforeCurrentLevel = (1..<clampedLevel).reduce(0) { partialResult, level in
+            partialResult + xpRequired(for: level)
+        }
+
+        guard clampedLevel < maxLevel else {
+            return earnedBeforeCurrentLevel
+        }
+
+        return earnedBeforeCurrentLevel + min(max(currentXP, 0), xpRequired(for: clampedLevel))
+    }
 }
 
 @MainActor
@@ -195,8 +237,29 @@ final class HabitQuestStore: ObservableObject {
     }
 
     var xpProgress: Double {
+        if isAtMaxLevel {
+            return 1
+        }
+
         guard userProfile.xpToNextLevel > 0 else { return 0 }
         return min(Double(userProfile.currentXP) / Double(userProfile.xpToNextLevel), 1)
+    }
+
+    var isAtMaxLevel: Bool {
+        userProfile.level >= QuestLeveling.maxLevel
+    }
+
+    var nextLevelTitle: String {
+        isAtMaxLevel ? "Max Level Reached" : "Progress to Level \(userProfile.level + 1)"
+    }
+
+    var xpProgressLabel: String {
+        isAtMaxLevel ? "MAX" : "\(userProfile.currentXP) / \(userProfile.xpToNextLevel) XP"
+    }
+
+    var xpRemainingToNextLevel: Int {
+        guard !isAtMaxLevel else { return 0 }
+        return max(userProfile.xpToNextLevel - userProfile.currentXP, 0)
     }
 
     var completedHabitsCount: Int {
@@ -628,7 +691,7 @@ final class HabitQuestStore: ObservableObject {
     private func resetLocalData() {
         habits = []
         achievements = Achievement.starterSet
-        userProfile = UserProfile(name: "", level: 1, currentXP: 0, xpToNextLevel: 300, totalHabitsCompleted: 0, longestStreak: 0, avatar: "\u{1F464}", lastDailyRefreshDate: Self.dayKey(for: .now))
+        userProfile = UserProfile(name: "", totalXP: 0, level: 1, currentXP: 0, xpToNextLevel: QuestLeveling.xpRequired(for: 1), totalHabitsCompleted: 0, longestStreak: 0, avatar: "\u{1F464}", lastDailyRefreshDate: Self.dayKey(for: .now))
     }
 
     private func refreshDerivedState(awardAchievementBonuses: Bool) {
@@ -645,6 +708,7 @@ final class HabitQuestStore: ObservableObject {
 
         userProfile.totalHabitsCompleted = habits.reduce(0) { $0 + $1.completionHistory.count }
         userProfile.longestStreak = habits.map(\.streak).max() ?? 0
+        recalculateLevelState()
         updateAchievements(awardBonuses: awardAchievementBonuses)
     }
 
@@ -700,18 +764,21 @@ final class HabitQuestStore: ObservableObject {
 
     private func awardXP(_ amount: Int) {
         guard amount > 0 else { return }
-
-        userProfile.currentXP += amount
-        while userProfile.currentXP >= userProfile.xpToNextLevel {
-            userProfile.currentXP -= userProfile.xpToNextLevel
-            userProfile.level += 1
-            userProfile.xpToNextLevel += 150
-        }
+        userProfile.totalXP += amount
+        recalculateLevelState()
     }
 
     private func removeXP(_ amount: Int) {
         guard amount > 0 else { return }
-        userProfile.currentXP = max(userProfile.currentXP - amount, 0)
+        userProfile.totalXP = max(userProfile.totalXP - amount, 0)
+        recalculateLevelState()
+    }
+
+    private func recalculateLevelState() {
+        let state = QuestLeveling.state(for: userProfile.totalXP)
+        userProfile.level = state.level
+        userProfile.currentXP = state.currentXP
+        userProfile.xpToNextLevel = state.xpToNextLevel
     }
 
     private func applyMissedHabitPenaltiesIfNeeded() {

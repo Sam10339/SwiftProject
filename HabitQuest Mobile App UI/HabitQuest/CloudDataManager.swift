@@ -120,9 +120,10 @@ extension UserProfile {
     static func starter(email: String?) -> UserProfile {
         UserProfile(
             name: Self.defaultName(for: email),
+            totalXP: 0,
             level: 1,
             currentXP: 0,
-            xpToNextLevel: 300,
+            xpToNextLevel: QuestLeveling.xpRequired(for: 1),
             totalHabitsCompleted: 0,
             longestStreak: 0,
             avatar: "\u{1F464}",
@@ -134,11 +135,17 @@ extension UserProfile {
         let starter = Self.starter(email: fallbackEmail)
         let data = documentData ?? [:]
 
+        let storedLevel = data["level"] as? Int ?? starter.level
+        let storedCurrentXP = data["currentXP"] as? Int ?? starter.currentXP
+        let totalXP = data["totalXP"] as? Int ?? QuestLeveling.totalXP(forLevel: storedLevel, currentXP: storedCurrentXP)
+        let levelState = QuestLeveling.state(for: totalXP)
+
         self.init(
             name: data["name"] as? String ?? starter.name,
-            level: data["level"] as? Int ?? starter.level,
-            currentXP: data["currentXP"] as? Int ?? starter.currentXP,
-            xpToNextLevel: data["xpToNextLevel"] as? Int ?? starter.xpToNextLevel,
+            totalXP: totalXP,
+            level: levelState.level,
+            currentXP: levelState.currentXP,
+            xpToNextLevel: levelState.xpToNextLevel,
             totalHabitsCompleted: data["totalHabitsCompleted"] as? Int ?? starter.totalHabitsCompleted,
             longestStreak: data["longestStreak"] as? Int ?? starter.longestStreak,
             avatar: data["avatar"] as? String ?? starter.avatar,
@@ -150,6 +157,7 @@ extension UserProfile {
         [
             "name": name,
             "email": email ?? NSNull(),
+            "totalXP": totalXP,
             "level": level,
             "currentXP": currentXP,
             "xpToNextLevel": xpToNextLevel,

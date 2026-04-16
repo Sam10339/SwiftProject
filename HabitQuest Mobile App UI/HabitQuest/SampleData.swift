@@ -85,9 +85,10 @@ enum SampleData {
 
     static let userProfile = UserProfile(
         name: "Alex Johnson",
+        totalXP: 10965,
         level: 8,
-        currentXP: 2340,
-        xpToNextLevel: 3000,
+        currentXP: 565,
+        xpToNextLevel: 825,
         totalHabitsCompleted: 156,
         longestStreak: 22,
         avatar: "\u{1F464}",

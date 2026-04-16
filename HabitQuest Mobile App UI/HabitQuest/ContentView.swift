@@ -616,7 +616,7 @@ private struct DashboardScreen: View {
                                 Text("Level \(store.userProfile.level)")
                                     .font(.system(size: 13, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.78))
-                                Text("\(store.userProfile.currentXP.formatted(.number.grouping(.automatic))) / \(store.userProfile.xpToNextLevel.formatted(.number.grouping(.automatic))) XP")
+                                Text(store.xpProgressLabel)
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
                                     .foregroundStyle(.white)
                             }
@@ -1089,11 +1089,11 @@ private struct AchievementsScreen: View {
 
                         VStack(spacing: 8) {
                             HStack {
-                                Text("Progress to Level \(store.userProfile.level + 1)")
+                                Text(store.nextLevelTitle)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.76))
                                 Spacer()
-                                Text("\(store.userProfile.currentXP) / \(store.userProfile.xpToNextLevel) XP")
+                                Text(store.xpProgressLabel)
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                                     .foregroundStyle(.white)
                             }
@@ -1355,11 +1355,11 @@ private struct ProfileScreen: View {
 
                     VStack(spacing: 10) {
                         HStack {
-                            Text("Progress to Level \(store.userProfile.level + 1)")
+                            Text(store.nextLevelTitle)
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(.white.opacity(0.78))
                             Spacer()
-                            Text("\(store.userProfile.currentXP) / \(store.userProfile.xpToNextLevel) XP")
+                            Text(store.xpProgressLabel)
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -1410,15 +1410,15 @@ private struct ProfileScreen: View {
                 VStack(spacing: 16) {
                     QuestProgressRing(progress: store.xpProgress, size: 140, lineWidth: 12) {
                         VStack(spacing: 4) {
-                            GradientText("\(Int((store.xpProgress * 100).rounded()))%", gradient: QuestPalette.primaryGradient)
+                            GradientText(store.isAtMaxLevel ? "MAX" : "\(Int((store.xpProgress * 100).rounded()))%", gradient: QuestPalette.primaryGradient)
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                            Text("to next level")
+                            Text(store.isAtMaxLevel ? "top level" : "to next level")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(QuestPalette.gray500)
                         }
                     }
 
-                    Text("\(max(store.userProfile.xpToNextLevel - store.userProfile.currentXP, 0)) XP remaining")
+                    Text(store.isAtMaxLevel ? "You've reached level 50." : "\(store.xpRemainingToNextLevel) XP remaining")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(QuestPalette.gray500)
                 }
