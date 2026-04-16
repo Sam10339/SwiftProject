@@ -520,7 +520,7 @@ final class HabitQuestStore: ObservableObject {
         habit.streak = Self.currentStreak(for: habit.completionHistory)
         habits[index] = habit
 
-        refreshDerivedState(awardAchievementBonuses: true)
+        refreshDerivedState()
         schedulePersistCurrentUserState()
     }
 
@@ -549,7 +549,7 @@ final class HabitQuestStore: ObservableObject {
         habit.streak = Self.currentStreak(for: habit.completionHistory)
         habits[index] = habit
 
-        refreshDerivedState(awardAchievementBonuses: true)
+        refreshDerivedState()
         schedulePersistCurrentUserState()
     }
 
@@ -574,13 +574,13 @@ final class HabitQuestStore: ObservableObject {
 
         habits.insert(newHabit, at: 0)
         selectedTab = .dashboard
-        refreshDerivedState(awardAchievementBonuses: false)
+        refreshDerivedState()
         schedulePersistCurrentUserState()
     }
 
     func deleteHabit(id: String) {
         habits.removeAll { $0.id == id }
-        refreshDerivedState(awardAchievementBonuses: false)
+        refreshDerivedState()
 
         guard let userID = activeUserID else { return }
 
@@ -638,7 +638,7 @@ final class HabitQuestStore: ObservableObject {
             userProfile = snapshot.profile
             habits = snapshot.habits
             achievements = snapshot.achievements
-            refreshDerivedState(awardAchievementBonuses: false)
+            refreshDerivedState()
             selectedTab = .dashboard
             path = []
             if hasCompletedOnboarding {
@@ -694,7 +694,7 @@ final class HabitQuestStore: ObservableObject {
         userProfile = UserProfile(name: "", totalXP: 0, level: 1, currentXP: 0, xpToNextLevel: QuestLeveling.xpRequired(for: 1), totalHabitsCompleted: 0, longestStreak: 0, avatar: "\u{1F464}", lastDailyRefreshDate: Self.dayKey(for: .now))
     }
 
-    private func refreshDerivedState(awardAchievementBonuses: Bool) {
+    private func refreshDerivedState() {
         applyMissedHabitPenaltiesIfNeeded()
 
         habits = habits.map { habit in
@@ -709,10 +709,10 @@ final class HabitQuestStore: ObservableObject {
         userProfile.totalHabitsCompleted = habits.reduce(0) { $0 + $1.completionHistory.count }
         userProfile.longestStreak = habits.map(\.streak).max() ?? 0
         recalculateLevelState()
-        updateAchievements(awardBonuses: awardAchievementBonuses)
+        updateAchievements()
     }
 
-    private func updateAchievements(awardBonuses: Bool) {
+    private func updateAchievements() {
         let todayCompletedCount = habits.filter(\.completed).count
         let longestStreak = userProfile.longestStreak
         let totalCompleted = userProfile.totalHabitsCompleted
@@ -743,12 +743,6 @@ final class HabitQuestStore: ObservableObject {
 
             let cappedProgress = min(progress, target)
             let shouldUnlock = progress >= target
-            let newlyUnlocked = shouldUnlock && !achievement.unlocked
-
-            if awardBonuses && newlyUnlocked {
-                awardXP(achievement.xpReward)
-            }
-
             return Achievement(
                 id: achievement.id,
                 title: achievement.title,
