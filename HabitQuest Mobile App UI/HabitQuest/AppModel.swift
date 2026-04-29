@@ -71,6 +71,7 @@ struct Achievement: Identifiable, Hashable {
     var description: String
     var icon: String
     var unlocked: Bool
+    var claimed: Bool
     var progress: Int?
     var total: Int?
     var xpReward: Int
@@ -206,13 +207,25 @@ final class HabitQuestStore: ObservableObject {
         achievements.filter(\.unlocked).count
     }
 
+    var finishedAchievementsCount: Int {
+        achievements.filter(\.claimed).count
+    }
+
+    var claimableAchievements: [Achievement] {
+        achievements.filter { $0.unlocked && !$0.claimed }
+    }
+
+    var finishedAchievements: [Achievement] {
+        achievements.filter(\.claimed)
+    }
+
     var achievementCompletionPercentage: Int {
         guard !achievements.isEmpty else { return 0 }
-        return Int((Double(unlockedAchievementsCount) / Double(achievements.count) * 100).rounded())
+        return Int((Double(finishedAchievementsCount) / Double(achievements.count) * 100).rounded())
     }
 
     var totalAchievementBonusXP: Int {
-        achievements.filter(\.unlocked).reduce(0) { $0 + $1.xpReward }
+        achievements.filter(\.claimed).reduce(0) { $0 + $1.xpReward }
     }
 
     var averageStreak: Int {
@@ -409,6 +422,16 @@ final class HabitQuestStore: ObservableObject {
         }
     }
 
+    func claimAchievement(id: String) {
+        guard let index = achievements.firstIndex(where: { $0.id == id }) else { return }
+        guard achievements[index].unlocked && !achievements[index].claimed else { return }
+
+        achievements[index].claimed = true
+        achievements[index].progress = nil
+        awardXP(achievements[index].xpReward)
+        schedulePersistCurrentUserState()
+    }
+
     private func handleAuthStateChange(_ session: AuthSession?) async {
         authEmail = session?.email ?? ""
 
@@ -505,7 +528,7 @@ final class HabitQuestStore: ObservableObject {
         userProfile = UserProfile(name: "", level: 1, currentXP: 0, xpToNextLevel: 300, totalHabitsCompleted: 0, longestStreak: 0, avatar: "\u{1F464}")
     }
 
-    private func refreshDerivedState(awardAchievementBonuses: Bool) {
+    private func refreshDerivedState(awardAchievementBonuses _: Bool) {
         habits = habits.map { habit in
             var habit = habit
             habit.completionHistory = Self.sortedHistory(habit.completionHistory)
@@ -515,10 +538,10 @@ final class HabitQuestStore: ObservableObject {
         }
 
         userProfile.longestStreak = habits.map(\.streak).max() ?? 0
-        updateAchievements(awardBonuses: awardAchievementBonuses)
+        updateAchievements()
     }
 
-    private func updateAchievements(awardBonuses: Bool) {
+    private func updateAchievements() {
         let todayCompletedCount = habits.filter(\.completed).count
         let longestStreak = userProfile.longestStreak
         let totalCompleted = userProfile.totalHabitsCompleted
@@ -548,12 +571,7 @@ final class HabitQuestStore: ObservableObject {
             }
 
             let cappedProgress = min(progress, target)
-            let shouldUnlock = progress >= target
-            let newlyUnlocked = shouldUnlock && !achievement.unlocked
-
-            if awardBonuses && newlyUnlocked {
-                awardXP(achievement.xpReward)
-            }
+            let shouldUnlock = achievement.unlocked || progress >= target
 
             return Achievement(
                 id: achievement.id,
@@ -561,6 +579,7 @@ final class HabitQuestStore: ObservableObject {
                 description: achievement.description,
                 icon: achievement.icon,
                 unlocked: shouldUnlock,
+                claimed: shouldUnlock && achievement.claimed,
                 progress: shouldUnlock ? nil : cappedProgress,
                 total: achievement.total,
                 xpReward: achievement.xpReward

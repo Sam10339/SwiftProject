@@ -70,12 +70,12 @@ enum SampleData {
     ]
 
     static let achievements: [Achievement] = [
-        Achievement(id: "1", title: "First Step", description: "Complete your first habit", icon: "\u{1F3AF}", unlocked: true, progress: nil, total: nil, xpReward: 100),
-        Achievement(id: "2", title: "Week Warrior", description: "Maintain a 7-day streak", icon: "\u{26A1}", unlocked: true, progress: nil, total: nil, xpReward: 250),
-        Achievement(id: "3", title: "Consistency King", description: "Maintain a 30-day streak", icon: "\u{1F451}", unlocked: false, progress: 15, total: 30, xpReward: 500),
-        Achievement(id: "4", title: "Habit Master", description: "Complete 100 habits total", icon: "\u{1F3C6}", unlocked: false, progress: 45, total: 100, xpReward: 1000),
-        Achievement(id: "5", title: "Early Bird", description: "Complete a habit before 8 AM for 7 days", icon: "\u{1F305}", unlocked: true, progress: nil, total: nil, xpReward: 300),
-        Achievement(id: "6", title: "Multi-tasker", description: "Complete 5 habits in a single day", icon: "\u{1F3AA}", unlocked: false, progress: 3, total: 5, xpReward: 400)
+        Achievement(id: "1", title: "First Step", description: "Complete your first habit", icon: "\u{1F3AF}", unlocked: true, claimed: true, progress: nil, total: nil, xpReward: 100),
+        Achievement(id: "2", title: "Week Warrior", description: "Maintain a 7-day streak", icon: "\u{26A1}", unlocked: true, claimed: true, progress: nil, total: nil, xpReward: 250),
+        Achievement(id: "3", title: "Consistency King", description: "Maintain a 30-day streak", icon: "\u{1F451}", unlocked: false, claimed: false, progress: 15, total: 30, xpReward: 500),
+        Achievement(id: "4", title: "Habit Master", description: "Complete 100 habits total", icon: "\u{1F3C6}", unlocked: false, claimed: false, progress: 45, total: 100, xpReward: 1000),
+        Achievement(id: "5", title: "Early Bird", description: "Complete a habit before 8 AM for 7 days", icon: "\u{1F305}", unlocked: true, claimed: false, progress: nil, total: nil, xpReward: 300),
+        Achievement(id: "6", title: "Multi-tasker", description: "Complete 5 habits in a single day", icon: "\u{1F3AA}", unlocked: false, claimed: false, progress: 3, total: 5, xpReward: 400)
     ]
 
     static let userProfile = UserProfile(

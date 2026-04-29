@@ -1134,7 +1134,7 @@ private struct AchievementsScreen: View {
                 VStack(spacing: 16) {
                     QuestProgressRing(progress: Double(store.achievementCompletionPercentage) / 100, size: 140, lineWidth: 12) {
                         VStack(spacing: 4) {
-                            GradientText("\(store.unlockedAchievementsCount)", gradient: QuestPalette.primaryGradient)
+                            GradientText("\(store.finishedAchievementsCount)", gradient: QuestPalette.primaryGradient)
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                             Text("of \(store.achievements.count)")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -1152,13 +1152,38 @@ private struct AchievementsScreen: View {
                 .padding(.horizontal, QuestLayout.contentPadding)
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("All Achievements")
+                    Text("Available Achievements")
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
                     VStack(spacing: 12) {
-                        ForEach(store.achievements) { achievement in
-                            AchievementBadgeView(achievement: achievement)
+                        ForEach(store.achievements.filter { !$0.claimed }) { achievement in
+                            AchievementBadgeView(achievement: achievement) {
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                                    store.claimAchievement(id: achievement.id)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, QuestLayout.contentPadding)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Finished Achievements")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(QuestPalette.gray900)
+
+                    if store.finishedAchievements.isEmpty {
+                        EmptyStateCard(
+                            symbol: "checkmark.seal.fill",
+                            title: "No finished achievements yet",
+                            message: "Claim an unlocked achievement to move it here."
+                        )
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(store.finishedAchievements) { achievement in
+                                AchievementBadgeView(achievement: achievement)
+                            }
                         }
                     }
                 }
@@ -1623,6 +1648,16 @@ private struct HabitRowCard: View {
 
 private struct AchievementBadgeView: View {
     let achievement: Achievement
+    let onClaim: (() -> Void)?
+
+    private var isClaimable: Bool {
+        achievement.unlocked && !achievement.claimed
+    }
+
+    init(achievement: Achievement, onClaim: (() -> Void)? = nil) {
+        self.achievement = achievement
+        self.onClaim = onClaim
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -1643,7 +1678,11 @@ private struct AchievementBadgeView: View {
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(QuestPalette.gray500)
 
-                if !achievement.unlocked, let progress = achievement.progress, let total = achievement.total {
+                if achievement.claimed {
+                    AchievementStatusPill(text: "Finished", symbol: "checkmark.seal.fill", tint: QuestPalette.green, background: Color(hex: 0xECFDF3), border: Color(hex: 0xA7F3D0))
+                } else if isClaimable {
+                    AchievementStatusPill(text: "Claim +\(achievement.xpReward) XP", symbol: "bolt.fill", tint: QuestPalette.purple, background: QuestPalette.purpleSoft, border: Color(hex: 0xE9D5FF))
+                } else if let progress = achievement.progress, let total = achievement.total {
                     VStack(spacing: 6) {
                         HStack {
                             Text("Progress")
@@ -1672,6 +1711,71 @@ private struct AchievementBadgeView: View {
                 : AnyShapeStyle(Color.white),
             border: achievement.unlocked ? Color(hex: 0xE9D5FF) : QuestPalette.gray100,
             shadowColor: Color.black.opacity(0.05),
+            shadowRadius: 10,
+            shadowY: 6
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isClaimable else { return }
+            onClaim?()
+        }
+    }
+}
+
+private struct AchievementStatusPill: View {
+    let text: String
+    let symbol: String
+    let tint: Color
+    let background: Color
+    let border: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+            Text(text)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule(style: .continuous)
+                .fill(background)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(border, lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct EmptyStateCard: View {
+    let symbol: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(QuestPalette.gray400)
+
+            Text(title)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(QuestPalette.gray700)
+
+            Text(message)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(QuestPalette.gray500)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .questCardStyle(
+            background: AnyShapeStyle(QuestPalette.gray50),
+            border: QuestPalette.gray100,
+            shadowColor: Color.black.opacity(0.03),
             shadowRadius: 10,
             shadowY: 6
         )

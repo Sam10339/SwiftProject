@@ -210,23 +210,25 @@ private extension Habit {
 extension Achievement {
     static var starterSet: [Achievement] {
         [
-            Achievement(id: "1", title: "First Step", description: "Complete your first habit", icon: "\u{1F3AF}", unlocked: false, progress: 0, total: 1, xpReward: 100),
-            Achievement(id: "2", title: "Week Warrior", description: "Maintain a 7-day streak", icon: "\u{26A1}", unlocked: false, progress: 0, total: 7, xpReward: 250),
-            Achievement(id: "3", title: "Consistency King", description: "Maintain a 30-day streak", icon: "\u{1F451}", unlocked: false, progress: 0, total: 30, xpReward: 500),
-            Achievement(id: "4", title: "Habit Master", description: "Complete 100 habits total", icon: "\u{1F3C6}", unlocked: false, progress: 0, total: 100, xpReward: 1000),
-            Achievement(id: "5", title: "Early Bird", description: "Complete a habit before 8 AM for 7 days", icon: "\u{1F305}", unlocked: false, progress: 0, total: 7, xpReward: 300),
-            Achievement(id: "6", title: "Multi-tasker", description: "Complete 5 habits in a single day", icon: "\u{1F3AA}", unlocked: false, progress: 0, total: 5, xpReward: 400)
+            Achievement(id: "1", title: "First Step", description: "Complete your first habit", icon: "\u{1F3AF}", unlocked: false, claimed: false, progress: 0, total: 1, xpReward: 100),
+            Achievement(id: "2", title: "Week Warrior", description: "Maintain a 7-day streak", icon: "\u{26A1}", unlocked: false, claimed: false, progress: 0, total: 7, xpReward: 250),
+            Achievement(id: "3", title: "Consistency King", description: "Maintain a 30-day streak", icon: "\u{1F451}", unlocked: false, claimed: false, progress: 0, total: 30, xpReward: 500),
+            Achievement(id: "4", title: "Habit Master", description: "Complete 100 habits total", icon: "\u{1F3C6}", unlocked: false, claimed: false, progress: 0, total: 100, xpReward: 1000),
+            Achievement(id: "5", title: "Early Bird", description: "Complete a habit before 8 AM for 7 days", icon: "\u{1F305}", unlocked: false, claimed: false, progress: 0, total: 7, xpReward: 300),
+            Achievement(id: "6", title: "Multi-tasker", description: "Complete 5 habits in a single day", icon: "\u{1F3AA}", unlocked: false, claimed: false, progress: 0, total: 5, xpReward: 400)
         ]
     }
 
     init(document: QueryDocumentSnapshot) {
         let data = document.data()
+        let unlocked = data["unlocked"] as? Bool ?? false
         self.init(
             id: document.documentID,
             title: data["title"] as? String ?? "Achievement",
             description: data["description"] as? String ?? "",
             icon: data["icon"] as? String ?? "\u{1F3C6}",
-            unlocked: data["unlocked"] as? Bool ?? false,
+            unlocked: unlocked,
+            claimed: data["claimed"] as? Bool ?? unlocked,
             progress: data["progress"] as? Int,
             total: data["total"] as? Int,
             xpReward: data["xpReward"] as? Int ?? 0
@@ -239,6 +241,7 @@ extension Achievement {
             "description": description,
             "icon": icon,
             "unlocked": unlocked,
+            "claimed": claimed,
             "progress": progress ?? NSNull(),
             "total": total ?? NSNull(),
             "xpReward": xpReward,
