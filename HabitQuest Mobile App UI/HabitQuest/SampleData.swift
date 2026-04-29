@@ -12,6 +12,7 @@ enum SampleData {
             completed: true,
             xp: 50,
             completionHistory: ["2026-03-11", "2026-03-10", "2026-03-09", "2026-03-08"],
+            missedHistory: [],
             reminderEnabled: true,
             reminderTime: "07:00"
         ),
@@ -25,6 +26,7 @@ enum SampleData {
             completed: false,
             xp: 40,
             completionHistory: ["2026-03-10", "2026-03-09", "2026-03-08"],
+            missedHistory: [],
             reminderEnabled: true,
             reminderTime: "20:00"
         ),
@@ -38,6 +40,7 @@ enum SampleData {
             completed: true,
             xp: 30,
             completionHistory: ["2026-03-11", "2026-03-10", "2026-03-09"],
+            missedHistory: [],
             reminderEnabled: false,
             reminderTime: nil
         ),
@@ -51,6 +54,7 @@ enum SampleData {
             completed: false,
             xp: 60,
             completionHistory: ["2026-03-10", "2026-03-09"],
+            missedHistory: [],
             reminderEnabled: true,
             reminderTime: "18:00"
         ),
@@ -64,6 +68,7 @@ enum SampleData {
             completed: true,
             xp: 70,
             completionHistory: ["2026-03-11", "2026-03-10", "2026-03-09"],
+            missedHistory: [],
             reminderEnabled: true,
             reminderTime: "14:00"
         )
@@ -80,12 +85,14 @@ enum SampleData {
 
     static let userProfile = UserProfile(
         name: "Alex Johnson",
+        totalXP: 10965,
         level: 8,
-        currentXP: 2340,
-        xpToNextLevel: 3000,
+        currentXP: 565,
+        xpToNextLevel: 825,
         totalHabitsCompleted: 156,
         longestStreak: 22,
-        avatar: "\u{1F464}"
+        avatar: "\u{1F464}",
+        lastDailyRefreshDate: "2026-03-11"
     )
 
     static let motivationalMessages = [

@@ -79,6 +79,12 @@ enum QuestFormatters {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+
+    static let weekdayShort: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter
+    }()
 }
 
 extension Color {

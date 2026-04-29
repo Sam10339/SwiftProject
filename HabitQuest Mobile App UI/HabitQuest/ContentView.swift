@@ -616,7 +616,7 @@ private struct DashboardScreen: View {
                                 Text("Level \(store.userProfile.level)")
                                     .font(.system(size: 13, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.78))
-                                Text("\(store.userProfile.currentXP.formatted(.number.grouping(.automatic))) / \(store.userProfile.xpToNextLevel.formatted(.number.grouping(.automatic))) XP")
+                                Text(store.xpProgressLabel)
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
                                     .foregroundStyle(.white)
                             }
@@ -677,7 +677,8 @@ private struct DashboardScreen: View {
 
                             VStack(spacing: 14) {
                                 DashboardStatLine(label: "Completion", value: "\(store.dailyCompletionPercentage)%", valueColor: QuestPalette.gray900)
-                                DashboardStatLine(label: "XP Earned", value: "+\(store.totalXPToday) XP", valueGradient: QuestPalette.primaryGradient)
+                                DashboardStatLine(label: "XP Gained", value: "+\(store.xpGainedToday) XP", valueGradient: QuestPalette.primaryGradient)
+                                DashboardStatLine(label: "XP Lost", value: "-\(store.xpLostToday) XP", valueColor: QuestPalette.red)
                                 DashboardStatLine(label: "Longest Streak", value: "\(store.userProfile.longestStreak) days", valueColor: QuestPalette.orange)
                             }
                             .frame(maxWidth: .infinity)
@@ -734,8 +735,12 @@ private struct DashboardScreen: View {
                                 ForEach(store.habits) { habit in
                                     HabitRowCard(
                                         habit: habit,
-                                        onToggle: {
-                                            store.toggleHabit(id: habit.id)
+                                        isFailedToday: habit.missedHistory.contains(store.todayKey),
+                                        onComplete: {
+                                            store.completeHabit(id: habit.id)
+                                        },
+                                        onFail: {
+                                            store.failHabit(id: habit.id)
                                         },
                                         onSelect: {
                                             store.showHabitDetail(id: habit.id)
@@ -1084,11 +1089,11 @@ private struct AchievementsScreen: View {
 
                         VStack(spacing: 8) {
                             HStack {
-                                Text("Progress to Level \(store.userProfile.level + 1)")
+                                Text(store.nextLevelTitle)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.76))
                                 Spacer()
-                                Text("\(store.userProfile.currentXP) / \(store.userProfile.xpToNextLevel) XP")
+                                Text(store.xpProgressLabel)
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                                     .foregroundStyle(.white)
                             }
@@ -1226,8 +1231,8 @@ private struct AnalyticsScreen: View {
                 LazyVGrid(columns: twoColumnGrid, spacing: 12) {
                     AnalyticsMetricCard(symbol: "chart.line.uptrend.xyaxis", symbolColor: QuestPalette.green, value: "\(store.completedHabitsCount)/\(store.habits.count)", label: "Completed Today", backgroundColors: [QuestPalette.greenSoft, Color(hex: 0xECFDF5)], border: Color(hex: 0xBBF7D0))
                     AnalyticsMetricCard(symbol: "calendar", symbolColor: QuestPalette.orange, value: "\(store.averageStreak)", label: "Avg Streak Days", backgroundColors: [QuestPalette.orangeSoft, Color(hex: 0xFEF2F2)], border: Color(hex: 0xFED7AA))
-                    AnalyticsMetricCard(symbol: "bolt.fill", symbolColor: QuestPalette.purple, value: "1240", label: "XP This Week", backgroundColors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], border: Color(hex: 0xE9D5FF))
-                    AnalyticsMetricCard(symbol: "rosette", symbolColor: QuestPalette.blue, value: "88%", label: "Success Rate", backgroundColors: [Color(hex: 0xEFF6FF), Color(hex: 0xECFEFF)], border: Color(hex: 0xBFDBFE))
+                    AnalyticsMetricCard(symbol: "bolt.fill", symbolColor: QuestPalette.purple, value: "\(store.weeklyNetXP)", label: "Net XP This Week", backgroundColors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], border: Color(hex: 0xE9D5FF))
+                    AnalyticsMetricCard(symbol: "rosette", symbolColor: QuestPalette.blue, value: "\(store.successRate)%", label: "Success Rate", backgroundColors: [Color(hex: 0xEFF6FF), Color(hex: 0xECFEFF)], border: Color(hex: 0xBFDBFE))
                 }
                 .padding(.horizontal, QuestLayout.contentPadding)
 
@@ -1236,7 +1241,7 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    WeeklyBarChart(data: SampleData.weeklyActivity)
+                    WeeklyBarChart(data: store.weeklyActivity)
                 }
                 .padding(20)
                 .questCardStyle()
@@ -1247,7 +1252,7 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    MonthlyLineChart(data: SampleData.monthlyCompletion)
+                    MonthlyLineChart(data: store.monthlyCompletion)
                         .frame(height: 220)
                 }
                 .padding(20)
@@ -1274,9 +1279,9 @@ private struct AnalyticsScreen: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    InsightBullet(text: "You're most consistent on weekdays! Keep it up! \u{1F3AF}")
-                    InsightBullet(text: "Your morning habits have a 95% completion rate \u{2B50}")
-                    InsightBullet(text: "You've completed 21 habits this week - new record! \u{1F3C6}")
+                    InsightBullet(text: "You've completed \(store.userProfile.totalHabitsCompleted) habit check-ins across your account.")
+                    InsightBullet(text: "Your current success rate is \(store.successRate)% based on completed vs missed habit days.")
+                    InsightBullet(text: "Your net habit XP over the last 7 days is \(store.weeklyNetXP).")
                 }
                 .padding(20)
                 .questCardStyle(
@@ -1350,11 +1355,11 @@ private struct ProfileScreen: View {
 
                     VStack(spacing: 10) {
                         HStack {
-                            Text("Progress to Level \(store.userProfile.level + 1)")
+                            Text(store.nextLevelTitle)
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(.white.opacity(0.78))
                             Spacer()
-                            Text("\(store.userProfile.currentXP) / \(store.userProfile.xpToNextLevel) XP")
+                            Text(store.xpProgressLabel)
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -1396,18 +1401,24 @@ private struct ProfileScreen: View {
                 }
                 .padding(.horizontal, QuestLayout.contentPadding)
 
+                HStack(spacing: 12) {
+                    OverviewMetricCard(symbol: "plus.circle.fill", symbolColor: QuestPalette.green, value: "+\(store.totalXPGained)", label: "XP Gained", backgroundColors: [QuestPalette.greenSoft, Color(hex: 0xECFDF5)], border: Color(hex: 0xBBF7D0))
+                    OverviewMetricCard(symbol: "minus.circle.fill", symbolColor: QuestPalette.red, value: "-\(store.totalXPLost)", label: "XP Lost", backgroundColors: [Color(hex: 0xFEF2F2), Color(hex: 0xFFF1F2)], border: Color(hex: 0xFECACA))
+                }
+                .padding(.horizontal, QuestLayout.contentPadding)
+
                 VStack(spacing: 16) {
                     QuestProgressRing(progress: store.xpProgress, size: 140, lineWidth: 12) {
                         VStack(spacing: 4) {
-                            GradientText("\(Int((store.xpProgress * 100).rounded()))%", gradient: QuestPalette.primaryGradient)
+                            GradientText(store.isAtMaxLevel ? "MAX" : "\(Int((store.xpProgress * 100).rounded()))%", gradient: QuestPalette.primaryGradient)
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                            Text("to next level")
+                            Text(store.isAtMaxLevel ? "top level" : "to next level")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(QuestPalette.gray500)
                         }
                     }
 
-                    Text("\(max(store.userProfile.xpToNextLevel - store.userProfile.currentXP, 0)) XP remaining")
+                    Text(store.isAtMaxLevel ? "You've reached level 50." : "\(store.xpRemainingToNextLevel) XP remaining")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(QuestPalette.gray500)
                 }
@@ -1566,19 +1577,25 @@ private struct QuestTabBar: View {
 
 private struct HabitRowCard: View {
     let habit: Habit
-    let onToggle: () -> Void
+    let isFailedToday: Bool
+    let onComplete: () -> Void
+    let onFail: () -> Void
     let onSelect: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
-            Button(action: onToggle) {
+        HStack(alignment: .center, spacing: 16) {
+            Button(action: onSelect) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(habit.completed ? AnyShapeStyle(QuestPalette.primaryGradient.linear) : AnyShapeStyle(QuestPalette.gray100))
+                    .fill(statusBackground)
                     .frame(width: 48, height: 48)
                     .overlay(
                         Group {
                             if habit.completed {
                                 Image(systemName: "checkmark")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                            } else if isFailedToday {
+                                Image(systemName: "xmark")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundStyle(.white)
                             } else {
@@ -1603,10 +1620,32 @@ private struct HabitRowCard: View {
                     Text("+\(habit.xp) XP")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.purple)
+
+                    Text("-\(habit.xpPenalty) XP fail")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(QuestPalette.red)
                 }
+
+                Text(statusLabel)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(statusColor)
             }
 
             Spacer()
+
+            VStack(spacing: 8) {
+                Button(action: onComplete) {
+                    Text(habit.completed ? "Completed" : "Complete")
+                        .frame(width: 92, height: 34)
+                }
+                .buttonStyle(QuestMiniButtonStyle(background: habit.completed ? QuestPalette.green : QuestPalette.gray100, foreground: habit.completed ? .white : QuestPalette.gray900))
+
+                Button(action: onFail) {
+                    Text(isFailedToday ? "Failed" : "Fail")
+                        .frame(width: 92, height: 34)
+                }
+                .buttonStyle(QuestMiniButtonStyle(background: isFailedToday ? QuestPalette.red : Color(hex: 0xFEF2F2), foreground: isFailedToday ? .white : QuestPalette.red))
+            }
         }
         .padding(16)
         .questCardStyle(
@@ -1616,8 +1655,42 @@ private struct HabitRowCard: View {
             shadowRadius: 10,
             shadowY: 6
         )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
+    }
+
+    private var statusLabel: String {
+        if habit.completed {
+            return "Marked complete for today"
+        }
+
+        if isFailedToday {
+            return "Marked failed for today"
+        }
+
+        return "No result logged for today"
+    }
+
+    private var statusColor: Color {
+        if habit.completed {
+            return QuestPalette.green
+        }
+
+        if isFailedToday {
+            return QuestPalette.red
+        }
+
+        return QuestPalette.gray500
+    }
+
+    private var statusBackground: AnyShapeStyle {
+        if habit.completed {
+            return AnyShapeStyle(QuestPalette.primaryGradient.linear)
+        }
+
+        if isFailedToday {
+            return AnyShapeStyle(Color(hex: 0xEF4444))
+        }
+
+        return AnyShapeStyle(QuestPalette.gray100)
     }
 }
 
@@ -2357,5 +2430,22 @@ private struct QuestChipButtonStyle: ButtonStyle {
             .shadow(color: isSelected ? Color.black.opacity(0.1) : .clear, radius: 8, x: 0, y: 4)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+private struct QuestMiniButtonStyle: ButtonStyle {
+    let background: Color
+    let foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(foreground)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(background)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
