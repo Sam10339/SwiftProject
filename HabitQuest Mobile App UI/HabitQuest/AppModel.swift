@@ -765,14 +765,14 @@ final class HabitQuestStore: ObservableObject {
             }
 
             let cappedProgress = min(progress, target)
-            let shouldUnlock = progress >= target
+            let shouldUnlock = achievement.claimed || achievement.unlocked || progress >= target
             return Achievement(
                 id: achievement.id,
                 title: achievement.title,
                 description: achievement.description,
                 icon: achievement.icon,
                 unlocked: shouldUnlock,
-                claimed: shouldUnlock && achievement.claimed,
+                claimed: achievement.claimed,
                 progress: shouldUnlock ? nil : cappedProgress,
                 total: achievement.total,
                 xpReward: achievement.xpReward
