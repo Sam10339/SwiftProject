@@ -56,6 +56,9 @@ struct Habit: Identifiable, Hashable {
     var streak: Int
     var completed: Bool
     var xp: Int
+    var createdAt: Date
+    var isPaused: Bool
+    var pausedAt: Date?
     var completionHistory: [String]
     var missedHistory: [String]
     var reminderEnabled: Bool
@@ -71,6 +74,27 @@ struct Habit: Identifiable, Hashable {
 
     var totalLostXP: Int {
         missedHistory.count * xpPenalty
+    }
+
+    var consecutiveMisses: Int {
+        let trackingStart = Calendar.current.startOfDay(for: createdAt)
+        return Habit.currentConsecutiveDays(in: missedHistory, since: trackingStart)
+    }
+
+    private static func currentConsecutiveDays(in history: [String], since startDate: Date) -> Int {
+        let uniqueDates = Set(history.compactMap(HabitQuestStore.date(fromDayKey:)).filter { $0 >= startDate })
+        guard let latestDate = uniqueDates.max() else { return 0 }
+
+        var streak = 0
+        var cursor = latestDate
+
+        while uniqueDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: cursor) }) {
+            streak += 1
+            guard let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previousDay
+        }
+
+        return streak
     }
 }
 
@@ -231,6 +255,8 @@ final class HabitQuestStore: ObservableObject {
                 await self.handleAuthStateChange(session)
             }
         }
+
+        refreshDerivedState()
     }
 
     var todayLabel: String {
@@ -264,16 +290,17 @@ final class HabitQuestStore: ObservableObject {
     }
 
     var completedHabitsCount: Int {
-        habits.filter(\.completed).count
+        habits.filter { $0.completed && !$0.isPaused }.count
     }
 
     var dailyCompletionPercentage: Int {
-        guard !habits.isEmpty else { return 0 }
-        return Int((Double(completedHabitsCount) / Double(habits.count) * 100).rounded())
+        let activeHabits = habits.filter { !$0.isPaused }
+        guard !activeHabits.isEmpty else { return 0 }
+        return Int((Double(completedHabitsCount) / Double(activeHabits.count) * 100).rounded())
     }
 
     var totalXPToday: Int {
-        habits.filter(\.completed).reduce(0) { $0 + $1.xp }
+        habits.filter { $0.completed && !$0.isPaused }.reduce(0) { $0 + $1.xp }
     }
 
     var xpGainedToday: Int {
@@ -316,7 +343,6 @@ final class HabitQuestStore: ObservableObject {
     }
 
     var weeklyActivity: [WeeklyActivityPoint] {
-        let calendar = Calendar.current
         let dates = Self.dates(forLast: 7)
 
         return dates.map { date in
@@ -515,6 +541,8 @@ final class HabitQuestStore: ObservableObject {
         guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
 
         var habit = habits[index]
+        guard !habit.isPaused else { return }
+
         let todayKey = self.todayKey
 
         guard !habit.completionHistory.contains(todayKey) else { return }
@@ -541,6 +569,8 @@ final class HabitQuestStore: ObservableObject {
         guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
 
         var habit = habits[index]
+        guard !habit.isPaused else { return }
+
         let todayKey = self.todayKey
 
         guard !habit.missedHistory.contains(todayKey) else { return }
@@ -559,9 +589,22 @@ final class HabitQuestStore: ObservableObject {
 
         habit.completionHistory = Self.sortedHistory(habit.completionHistory)
         habit.missedHistory = Self.sortedHistory(habit.missedHistory)
+        habit.isPaused = habit.consecutiveMisses >= 3
+        habit.pausedAt = habit.isPaused ? .now : nil
         habit.streak = Self.currentStreak(for: habit.completionHistory)
         habits[index] = habit
 
+        refreshDerivedState()
+        schedulePersistCurrentUserState()
+    }
+
+    func resumeHabit(id: String) {
+        guard let index = habits.firstIndex(where: { $0.id == id }) else { return }
+        guard habits[index].isPaused else { return }
+
+        habits[index].isPaused = false
+        habits[index].pausedAt = nil
+        habits[index].createdAt = .now
         refreshDerivedState()
         schedulePersistCurrentUserState()
     }
@@ -579,6 +622,9 @@ final class HabitQuestStore: ObservableObject {
             streak: 0,
             completed: false,
             xp: rewardXP,
+            createdAt: .now,
+            isPaused: false,
+            pausedAt: nil,
             completionHistory: [],
             missedHistory: [],
             reminderEnabled: draft.reminderEnabled,
@@ -725,7 +771,8 @@ final class HabitQuestStore: ObservableObject {
             habit.completionHistory = Self.sortedHistory(habit.completionHistory)
             habit.missedHistory = Self.sortedHistory(habit.missedHistory)
             habit.streak = Self.currentStreak(for: habit.completionHistory)
-            habit.completed = habit.completionHistory.contains(Self.dayKey(for: .now))
+            habit.isPaused = habit.isPaused || habit.consecutiveMisses >= 3
+            habit.completed = !habit.isPaused && habit.completionHistory.contains(Self.dayKey(for: .now))
             return habit
         }
 
@@ -765,14 +812,14 @@ final class HabitQuestStore: ObservableObject {
             }
 
             let cappedProgress = min(progress, target)
-            let shouldUnlock = progress >= target
+            let shouldUnlock = achievement.claimed || achievement.unlocked || progress >= target
             return Achievement(
                 id: achievement.id,
                 title: achievement.title,
                 description: achievement.description,
                 icon: achievement.icon,
                 unlocked: shouldUnlock,
-                claimed: shouldUnlock && achievement.claimed,
+                claimed: achievement.claimed,
                 progress: shouldUnlock ? nil : cappedProgress,
                 total: achievement.total,
                 xpReward: achievement.xpReward
@@ -800,35 +847,38 @@ final class HabitQuestStore: ObservableObject {
     }
 
     private func applyMissedHabitPenaltiesIfNeeded() {
-        let today = Calendar.current.startOfDay(for: .now)
+        let calendar = Calendar.current
+        let now = Date.now
+        let today = calendar.startOfDay(for: now)
         let todayKey = Self.dayKey(for: today)
 
-        guard let lastRefreshKey = userProfile.lastDailyRefreshDate,
-              let lastRefreshDate = Self.dateFormatter.date(from: lastRefreshKey)
-        else {
+        guard let dayBeforeToday = calendar.date(byAdding: .day, value: -1, to: today) else {
             userProfile.lastDailyRefreshDate = todayKey
             return
         }
 
-        var cursor = Calendar.current.date(byAdding: .day, value: 1, to: lastRefreshDate) ?? today
-        let dayBeforeToday = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
+        for index in habits.indices where !habits[index].isPaused {
+            var cursor = calendar.startOfDay(for: habits[index].createdAt)
 
-        guard cursor <= dayBeforeToday else {
-            userProfile.lastDailyRefreshDate = todayKey
-            return
-        }
+            while cursor <= dayBeforeToday {
+                let dayKey = Self.dayKey(for: cursor)
+                let shouldTrack = Self.habit(habits[index], shouldTrackOn: cursor)
+                let deadlinePassed = now >= Self.deadline(for: habits[index], on: cursor)
+                let isUnlogged = !habits[index].completionHistory.contains(dayKey) && !habits[index].missedHistory.contains(dayKey)
 
-        while cursor <= dayBeforeToday {
-            let dayKey = Self.dayKey(for: cursor)
-
-            for index in habits.indices where Self.habit(habits[index], shouldTrackOn: cursor) {
-                if !habits[index].completionHistory.contains(dayKey) && !habits[index].missedHistory.contains(dayKey) {
+                if shouldTrack && deadlinePassed && isUnlogged {
                     habits[index].missedHistory.append(dayKey)
                     removeXP(habits[index].xpPenalty)
-                }
-            }
 
-            cursor = Calendar.current.date(byAdding: .day, value: 1, to: cursor) ?? dayBeforeToday.addingTimeInterval(1)
+                    if habits[index].consecutiveMisses >= 3 {
+                        habits[index].isPaused = true
+                        habits[index].pausedAt = now
+                        break
+                    }
+                }
+
+                cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? dayBeforeToday.addingTimeInterval(1)
+            }
         }
 
         userProfile.lastDailyRefreshDate = todayKey
@@ -875,6 +925,10 @@ final class HabitQuestStore: ObservableObject {
         dateFormatter.string(from: date)
     }
 
+    static func date(fromDayKey dayKey: String) -> Date? {
+        dateFormatter.date(from: dayKey)
+    }
+
     private static func dayKeys(forLast count: Int) -> [String] {
         dates(forLast: count).map(dayKey(for:))
     }
@@ -902,7 +956,12 @@ final class HabitQuestStore: ObservableObject {
     }
 
     private static func habit(_ habit: Habit, shouldTrackOn date: Date) -> Bool {
+        guard !habit.isPaused else { return false }
+
         switch habit.frequency {
+        case "Weekly":
+            let calendar = Calendar.current
+            return calendar.component(.weekday, from: date) == calendar.component(.weekday, from: habit.createdAt)
         case "Weekdays":
             return !Calendar.current.isDateInWeekend(date)
         case "Weekends":
@@ -910,6 +969,18 @@ final class HabitQuestStore: ObservableObject {
         default:
             return true
         }
+    }
+
+    private static func deadline(for habit: Habit, on date: Date) -> Date {
+        let calendar = Calendar.current
+        let scheduledDay = calendar.startOfDay(for: date)
+        let creationDay = calendar.startOfDay(for: habit.createdAt)
+
+        if calendar.isDate(scheduledDay, inSameDayAs: creationDay) {
+            return calendar.date(byAdding: .hour, value: 24, to: habit.createdAt) ?? scheduledDay.addingTimeInterval(86_400)
+        }
+
+        return calendar.date(byAdding: .day, value: 1, to: scheduledDay) ?? scheduledDay.addingTimeInterval(86_400)
     }
 
     private static let dateFormatter: DateFormatter = {

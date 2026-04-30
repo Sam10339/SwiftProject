@@ -742,6 +742,9 @@ private struct DashboardScreen: View {
                                         onFail: {
                                             store.failHabit(id: habit.id)
                                         },
+                                        onResume: {
+                                            store.resumeHabit(id: habit.id)
+                                        },
                                         onSelect: {
                                             store.showHabitDetail(id: habit.id)
                                         }
@@ -1194,27 +1197,6 @@ private struct AchievementsScreen: View {
                 }
                 .padding(.horizontal, QuestLayout.contentPadding)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Next Level Rewards")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundStyle(QuestPalette.gray900)
-
-                    VStack(spacing: 12) {
-                        RewardRow(emoji: "\u{1F3A8}", title: "Custom Theme Colors", subtitle: "Unlock at Level \(store.userProfile.level + 1)")
-                        RewardRow(emoji: "\u{1F31F}", title: "Exclusive Icons Pack", subtitle: "Unlock at Level \(store.userProfile.level + 2)")
-                    }
-                }
-                .padding(20)
-                .questCardStyle(
-                    background: AnyShapeStyle(
-                        LinearGradient(colors: [QuestPalette.purpleSoft, Color(hex: 0xEEF2FF)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    ),
-                    border: Color(hex: 0xE9D5FF),
-                    shadowColor: Color.black.opacity(0.03),
-                    shadowRadius: 10,
-                    shadowY: 6
-                )
-                .padding(.horizontal, QuestLayout.contentPadding)
                 .padding(.bottom, 24)
             }
         }
@@ -1605,6 +1587,7 @@ private struct HabitRowCard: View {
     let isFailedToday: Bool
     let onComplete: () -> Void
     let onFail: () -> Void
+    let onResume: () -> Void
     let onSelect: () -> Void
 
     var body: some View {
@@ -1615,7 +1598,11 @@ private struct HabitRowCard: View {
                     .frame(width: 48, height: 48)
                     .overlay(
                         Group {
-                            if habit.completed {
+                            if habit.isPaused {
+                                Image(systemName: "pause.fill")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                            } else if habit.completed {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundStyle(.white)
@@ -1651,25 +1638,35 @@ private struct HabitRowCard: View {
                         .foregroundStyle(QuestPalette.red)
                 }
 
-                Text(statusLabel)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(statusColor)
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    Text(statusLabel(at: timeline.date))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(statusColor)
+                }
             }
 
             Spacer()
 
             VStack(spacing: 8) {
-                Button(action: onComplete) {
-                    Text(habit.completed ? "Completed" : "Complete")
-                        .frame(width: 92, height: 34)
-                }
-                .buttonStyle(QuestMiniButtonStyle(background: habit.completed ? QuestPalette.green : QuestPalette.gray100, foreground: habit.completed ? .white : QuestPalette.gray900))
+                if habit.isPaused {
+                    Button(action: onResume) {
+                        Text("Resume")
+                            .frame(width: 92, height: 34)
+                    }
+                    .buttonStyle(QuestMiniButtonStyle(background: QuestPalette.orange, foreground: .white))
+                } else {
+                    Button(action: onComplete) {
+                        Text(habit.completed ? "Completed" : "Complete")
+                            .frame(width: 92, height: 34)
+                    }
+                    .buttonStyle(QuestMiniButtonStyle(background: habit.completed ? QuestPalette.green : QuestPalette.gray100, foreground: habit.completed ? .white : QuestPalette.gray900))
 
-                Button(action: onFail) {
-                    Text(isFailedToday ? "Failed" : "Fail")
-                        .frame(width: 92, height: 34)
+                    Button(action: onFail) {
+                        Text(isFailedToday ? "Failed" : "Fail")
+                            .frame(width: 92, height: 34)
+                    }
+                    .buttonStyle(QuestMiniButtonStyle(background: isFailedToday ? QuestPalette.red : Color(hex: 0xFEF2F2), foreground: isFailedToday ? .white : QuestPalette.red))
                 }
-                .buttonStyle(QuestMiniButtonStyle(background: isFailedToday ? QuestPalette.red : Color(hex: 0xFEF2F2), foreground: isFailedToday ? .white : QuestPalette.red))
             }
         }
         .padding(16)
@@ -1682,7 +1679,11 @@ private struct HabitRowCard: View {
         )
     }
 
-    private var statusLabel: String {
+    private func statusLabel(at date: Date = .now) -> String {
+        if habit.isPaused {
+            return "Paused after \(habit.consecutiveMisses) missed days in a row"
+        }
+
         if habit.completed {
             return "Marked complete for today"
         }
@@ -1691,10 +1692,14 @@ private struct HabitRowCard: View {
             return "Marked failed for today"
         }
 
-        return "No result logged for today"
+        return "Due in \(Self.timeRemaining(until: deadline(at: date), from: date))"
     }
 
     private var statusColor: Color {
+        if habit.isPaused {
+            return QuestPalette.orange
+        }
+
         if habit.completed {
             return QuestPalette.green
         }
@@ -1707,6 +1712,10 @@ private struct HabitRowCard: View {
     }
 
     private var statusBackground: AnyShapeStyle {
+        if habit.isPaused {
+            return AnyShapeStyle(QuestPalette.orangeGradient.linear)
+        }
+
         if habit.completed {
             return AnyShapeStyle(QuestPalette.primaryGradient.linear)
         }
@@ -1716,6 +1725,30 @@ private struct HabitRowCard: View {
         }
 
         return AnyShapeStyle(QuestPalette.gray100)
+    }
+
+    private func deadline(at date: Date) -> Date {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: date)
+        let creationDay = calendar.startOfDay(for: habit.createdAt)
+
+        if calendar.isDate(today, inSameDayAs: creationDay) {
+            return calendar.date(byAdding: .hour, value: 24, to: habit.createdAt) ?? today.addingTimeInterval(86_400)
+        }
+
+        return calendar.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86_400)
+    }
+
+    private static func timeRemaining(until deadline: Date, from date: Date) -> String {
+        let remainingSeconds = max(Int(deadline.timeIntervalSince(date)), 0)
+        let hours = remainingSeconds / 3_600
+        let minutes = (remainingSeconds % 3_600) / 60
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+
+        return "\(minutes)m"
     }
 }
 
