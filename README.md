@@ -216,6 +216,26 @@ The app uses Swift Package Manager packages for:
 - FirebaseAuth
 - FirebaseFirestore
 
+# Project Progress Videos
+
+Sprint 1 video:
+https://drive.google.com/file/d/17Hq_0A0ofw4dykGEwQaXocHcZQtStEG5/view?usp=sharing 
+
+Sprint 2 video:
+https://drive.google.com/file/d/1lXEwVPqzjDkK5YPYDL-2N5vMmucVA0rE/view?usp=sharing 
+
+Sprint 3 video:
+https://drive.google.com/file/d/18DQE58N8g5TjLG3wZLi6ndNsn8znVmmu/view?usp=sharing 
+
+Sprint 4 video:
+https://drive.google.com/file/d/1jy9Qd-CbDNtdki910JRRiHSZz7ZC6PO4/view?usp=sharing 
+
+Sprint 5 video: 
+https://drive.google.com/file/d/1I19lWMkLoVcyP2bIFlIR0bJp12osy0Rp/view?usp=sharing 
+
+Sprint 6 video:
+https://drive.google.com/file/d/1lO6Mh7UXq9ClpATqGAmQH3OT6slYK0SO/view?usp=sharing 
+
 ## Limitations
 
 - Notifications are not implemented yet, even though habits can store a reminder time.
