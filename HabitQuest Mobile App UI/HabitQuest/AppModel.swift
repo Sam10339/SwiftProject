@@ -45,6 +45,8 @@ enum MainTab: String, CaseIterable, Hashable {
 enum AppDestination: Hashable {
     case addHabit
     case habitDetail(String)
+    case editProfile
+    case privacySecurity
 }
 
 struct Habit: Identifiable, Hashable {
@@ -105,6 +107,7 @@ struct Achievement: Identifiable, Hashable {
     var icon: String
     var unlocked: Bool
     var claimed: Bool
+    var unlockedAt: Date?
     var progress: Int?
     var total: Int?
     var xpReward: Int
@@ -402,6 +405,23 @@ final class HabitQuestStore: ObservableObject {
         achievements.filter(\.claimed)
     }
 
+    var recentUnlockedAchievements: [Achievement] {
+        achievements
+            .filter(\.unlocked)
+            .sorted { lhs, rhs in
+                switch (lhs.unlockedAt, rhs.unlockedAt) {
+                case let (lhsDate?, rhsDate?):
+                    return lhsDate > rhsDate
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    return lhs.id > rhs.id
+                }
+            }
+    }
+
     var achievementCompletionPercentage: Int {
         guard !achievements.isEmpty else { return 0 }
         return Int((Double(finishedAchievementsCount) / Double(achievements.count) * 100).rounded())
@@ -533,6 +553,14 @@ final class HabitQuestStore: ObservableObject {
         path.append(.habitDetail(id))
     }
 
+    func showEditProfile() {
+        path.append(.editProfile)
+    }
+
+    func showPrivacySecurity() {
+        path.append(.privacySecurity)
+    }
+
     func habit(withID id: String) -> Habit? {
         habits.first(where: { $0.id == id })
     }
@@ -595,6 +623,19 @@ final class HabitQuestStore: ObservableObject {
         habits[index] = habit
 
         refreshDerivedState()
+        schedulePersistCurrentUserState()
+    }
+
+    func updateDisplayName(_ name: String) {
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedName.isEmpty else {
+            authErrorMessage = "Enter a display name."
+            return
+        }
+
+        userProfile.name = cleanedName
+        authErrorMessage = nil
+        authInfoMessage = "Profile updated."
         schedulePersistCurrentUserState()
     }
 
@@ -813,6 +854,7 @@ final class HabitQuestStore: ObservableObject {
 
             let cappedProgress = min(progress, target)
             let shouldUnlock = achievement.claimed || achievement.unlocked || progress >= target
+            let unlockedAt = achievement.unlockedAt ?? (shouldUnlock && !achievement.unlocked ? Date() : nil)
             return Achievement(
                 id: achievement.id,
                 title: achievement.title,
@@ -820,6 +862,7 @@ final class HabitQuestStore: ObservableObject {
                 icon: achievement.icon,
                 unlocked: shouldUnlock,
                 claimed: achievement.claimed,
+                unlockedAt: unlockedAt,
                 progress: shouldUnlock ? nil : cappedProgress,
                 total: achievement.total,
                 xpReward: achievement.xpReward
