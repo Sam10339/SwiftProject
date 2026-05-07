@@ -77,6 +77,10 @@ private struct MainExperienceView: View {
                         AddHabitScreen()
                     case .habitDetail(let id):
                         HabitDetailScreen(habitID: id)
+                    case .editProfile:
+                        EditProfileScreen()
+                    case .privacySecurity:
+                        PrivacySecurityScreen()
                     }
                 }
                 .toolbar(.hidden, for: .navigationBar)
@@ -1311,11 +1315,43 @@ private struct AnalyticsScreen: View {
 private struct ProfileScreen: View {
     @EnvironmentObject private var store: HabitQuestStore
 
-    private let settingsItems: [(symbol: String, title: String, gradient: QuestGradientSet)] = [
-        ("bell.fill", "Notifications", QuestPalette.cyanGradient),
-        ("person.fill", "Edit Profile", QuestPalette.primaryGradient),
-        ("shield.fill", "Privacy & Security", QuestPalette.greenGradient),
-        ("questionmark.circle.fill", "Help & Support", QuestPalette.orangeGradient)
+    private enum SettingsItem: CaseIterable {
+        case editProfile
+        case privacySecurity
+
+        var symbol: String {
+            switch self {
+            case .editProfile: return "person.fill"
+            case .privacySecurity: return "shield.fill"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .editProfile: return "Edit Profile"
+            case .privacySecurity: return "Privacy & Security"
+            }
+        }
+
+        var gradient: QuestGradientSet {
+            switch self {
+            case .editProfile: return QuestPalette.primaryGradient
+            case .privacySecurity: return QuestPalette.greenGradient
+            }
+        }
+    }
+
+    private var recentAchievements: [Achievement] {
+        Array(store.recentUnlockedAchievements.prefix(4))
+    }
+
+    private var remainingRecentAchievementsCount: Int {
+        max(store.recentUnlockedAchievements.count - recentAchievements.count, 0)
+    }
+
+    private let settingsItems = [
+        SettingsItem.editProfile,
+        SettingsItem.privacySecurity
     ]
 
     var body: some View {
@@ -1352,7 +1388,9 @@ private struct ProfileScreen: View {
 
                         Spacer()
 
-                        Button(action: { }) {
+                        Button(action: {
+                            store.showEditProfile()
+                        }) {
                             Image(systemName: "gearshape.fill")
                                 .font(.system(size: 18, weight: .bold))
                                 .frame(width: 40, height: 40)
@@ -1439,22 +1477,41 @@ private struct ProfileScreen: View {
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(QuestPalette.gray900)
 
-                    HStack(spacing: 12) {
-                        ForEach(["\u{1F3AF}", "\u{26A1}", "\u{1F305}"], id: \.self) { emoji in
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(QuestPalette.primaryGradient.linear)
-                                .frame(width: 56, height: 56)
-                                .overlay(
-                                    Text(emoji)
-                                        .font(.system(size: 28))
-                                )
-                                .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
-                        }
-
-                        Text("+3 more")
+                    if recentAchievements.isEmpty {
+                        Text("Unlocked achievements will appear here as you earn them.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(QuestPalette.gray500)
-                            .frame(maxWidth: .infinity, alignment: .center)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        HStack(spacing: 12) {
+                            ForEach(recentAchievements, id: \.id) { achievement in
+                                VStack(spacing: 6) {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(QuestPalette.primaryGradient.linear)
+                                        .frame(width: 56, height: 56)
+                                        .overlay(
+                                            Text(achievement.icon)
+                                                .font(.system(size: 28))
+                                        )
+                                        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
+
+                                    Text(achievement.title)
+                                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                        .lineLimit(1)
+                                        .foregroundStyle(QuestPalette.gray500)
+                                        .frame(width: 62)
+                                }
+                            }
+
+                            if remainingRecentAchievementsCount > 0 {
+                                Text("+\(remainingRecentAchievementsCount) more")
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(QuestPalette.gray500)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            } else {
+                                Spacer()
+                            }
+                        }
                     }
                 }
                 .padding(20)
@@ -1476,7 +1533,14 @@ private struct ProfileScreen: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(settingsItems.enumerated()), id: \.offset) { index, item in
-                            Button(action: { }) {
+                            Button {
+                                switch item {
+                                case .editProfile:
+                                    store.showEditProfile()
+                                case .privacySecurity:
+                                    store.showPrivacySecurity()
+                                }
+                            } label: {
                                 HStack(spacing: 16) {
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .fill(item.gradient.linear)
@@ -1538,6 +1602,242 @@ private struct ProfileScreen: View {
             }
         }
         .background(Color.white)
+    }
+}
+
+private struct EditProfileScreen: View {
+    @EnvironmentObject private var store: HabitQuestStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ProfileSubpageHeader(title: "Edit Profile") {
+                dismiss()
+            }
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(spacing: 14) {
+                        Circle()
+                            .fill(QuestPalette.primaryGradient.linear)
+                            .frame(width: 88, height: 88)
+                            .overlay(
+                                Text(store.userProfile.avatar)
+                                    .font(.system(size: 52))
+                            )
+                            .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
+
+                        Text(store.displayName)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray900)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .questCardStyle()
+
+                    if let authErrorMessage = store.authErrorMessage {
+                        AuthMessageCard(
+                            text: authErrorMessage,
+                            tint: QuestPalette.red,
+                            background: Color(hex: 0xFEF2F2),
+                            border: Color(hex: 0xFECACA),
+                            systemImage: "exclamationmark.circle.fill"
+                        )
+                    }
+
+                    if let authInfoMessage = store.authInfoMessage {
+                        AuthMessageCard(
+                            text: authInfoMessage,
+                            tint: QuestPalette.green,
+                            background: Color(hex: 0xECFDF3),
+                            border: Color(hex: 0xA7F3D0),
+                            systemImage: "checkmark.circle.fill"
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Profile")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray900)
+
+                        LabeledTextField(
+                            title: "Display Name",
+                            placeholder: "Enter your display name",
+                            text: $displayName,
+                            leadingSystemImage: "person.fill"
+                        )
+
+                        Button {
+                            store.updateDisplayName(displayName)
+                        } label: {
+                            Text("Save Profile")
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                        }
+                        .buttonStyle(QuestFilledButtonStyle(gradient: QuestPalette.primaryGradient))
+                    }
+                    .padding(20)
+                    .questCardStyle()
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Account")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray900)
+
+                        DetailInfoRow(label: "Email", value: store.authEmail.isEmpty ? "Not signed in" : store.authEmail, valueColor: QuestPalette.gray900)
+
+                        Button {
+                            Task {
+                                await store.sendPasswordReset(email: store.authEmail)
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "key.fill")
+                                Text(store.isAuthenticating ? "Sending..." : "Send Password Reset")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                        }
+                        .buttonStyle(QuestFilledButtonStyle(gradient: QuestPalette.greenGradient))
+                        .disabled(store.authEmail.isEmpty || store.isAuthenticating)
+
+                        Text("Email changes and password updates are handled through your secure Firebase account flow.")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray500)
+                            .lineSpacing(3)
+                    }
+                    .padding(20)
+                    .questCardStyle()
+                }
+                .padding(.horizontal, QuestLayout.contentPadding)
+                .padding(.vertical, 24)
+            }
+        }
+        .background(Color.white)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            displayName = store.displayName
+        }
+    }
+}
+
+private struct PrivacySecurityScreen: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ProfileSubpageHeader(title: "Privacy & Security") {
+                dismiss()
+            }
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Image(systemName: "shield.checkered")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(QuestPalette.green)
+
+                        Text("HabitQuest Privacy Statement")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray900)
+
+                        Text("HabitQuest only uses account information to sign you in and sync your habit progress. Your habits, XP, streaks, achievements, and profile details are stored for your account so they can be restored across sessions.")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray500)
+                            .lineSpacing(4)
+
+                        Text("We do not sell personal data. Authentication is handled by Firebase, and password reset requests are sent through Firebase's secure email flow. If you sign out, your local session is cleared from this device.")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(QuestPalette.gray500)
+                            .lineSpacing(4)
+                    }
+                    .padding(20)
+                    .questCardStyle()
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        PrivacySecurityRow(symbol: "lock.fill", title: "Secure Sign-In", detail: "Email and password authentication is managed by Firebase Authentication.")
+                        PrivacySecurityRow(symbol: "icloud.fill", title: "Progress Sync", detail: "Habit and achievement data syncs to your signed-in account.")
+                        PrivacySecurityRow(symbol: "person.crop.circle.badge.checkmark", title: "Account Control", detail: "You can sign out from the profile page at any time.")
+                    }
+                    .padding(20)
+                    .questCardStyle()
+                }
+                .padding(.horizontal, QuestLayout.contentPadding)
+                .padding(.vertical, 24)
+            }
+        }
+        .background(Color.white)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct ProfileSubpageHeader: View {
+    let title: String
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(QuestGlassIconButtonStyle())
+
+            Text(title)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Spacer()
+        }
+        .padding(.horizontal, QuestLayout.contentPadding)
+        .padding(.top, 50)
+        .padding(.bottom, 22)
+        .background(
+            QuestPalette.primaryGradient.linear
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 32,
+                        bottomTrailingRadius: 32,
+                        topTrailingRadius: 0,
+                        style: .continuous
+                    )
+                )
+        )
+    }
+}
+
+private struct PrivacySecurityRow: View {
+    let symbol: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(QuestPalette.greenGradient.linear)
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Image(systemName: symbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(QuestPalette.gray900)
+
+                Text(detail)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(QuestPalette.gray500)
+                    .lineSpacing(3)
+            }
+        }
     }
 }
 
