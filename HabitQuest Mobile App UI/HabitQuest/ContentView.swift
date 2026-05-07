@@ -1484,7 +1484,7 @@ private struct ProfileScreen: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         HStack(spacing: 12) {
-                            ForEach(recentAchievements) { achievement in
+                            ForEach(recentAchievements, id: \.id) { achievement in
                                 VStack(spacing: 6) {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .fill(QuestPalette.primaryGradient.linear)
@@ -1498,7 +1498,7 @@ private struct ProfileScreen: View {
                                     Text(achievement.title)
                                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                                         .lineLimit(1)
-                                        .foregroundStyle(QuestPalette.gray600)
+                                        .foregroundStyle(QuestPalette.gray500)
                                         .frame(width: 62)
                                 }
                             }
@@ -1743,12 +1743,12 @@ private struct PrivacySecurityScreen: View {
 
                         Text("HabitQuest only uses account information to sign you in and sync your habit progress. Your habits, XP, streaks, achievements, and profile details are stored for your account so they can be restored across sessions.")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(QuestPalette.gray600)
+                            .foregroundStyle(QuestPalette.gray500)
                             .lineSpacing(4)
 
                         Text("We do not sell personal data. Authentication is handled by Firebase, and password reset requests are sent through Firebase's secure email flow. If you sign out, your local session is cleared from this device.")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(QuestPalette.gray600)
+                            .foregroundStyle(QuestPalette.gray500)
                             .lineSpacing(4)
                     }
                     .padding(20)
