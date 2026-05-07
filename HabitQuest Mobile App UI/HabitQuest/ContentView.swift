@@ -1715,6 +1715,8 @@ private struct EditProfileScreen: View {
             }
         }
         .background(Color.white)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             displayName = store.displayName
         }
@@ -1767,6 +1769,8 @@ private struct PrivacySecurityScreen: View {
             }
         }
         .background(Color.white)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
